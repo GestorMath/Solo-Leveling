@@ -2,7 +2,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/app/lib/supabase'
 
-// ─── TIPOS (inalterados) ──────────────────────────────────────────────────────
 export type StatKey =
   | 'strength' | 'agility' | 'reflex' | 'vitality'
   | 'intelligence' | 'perception' | 'mentality' | 'faith' | 'bodyControl'
@@ -63,6 +62,14 @@ export interface RankChallenge {
   completed: boolean
 }
 
+export type ColorTheme = 'cyan' | 'purple' | 'gold'
+
+export const THEME_COLORS: Record<ColorTheme, string> = {
+  cyan: '#00ffff',
+  purple: '#9944ff',
+  gold: '#ffdd00',
+}
+
 interface SystemContextType {
   gold: number; xp: number; level: number; rank: RankTier; rankIndex: number
   stats: Stats; stamina: number; staminaMax: number; counters: Counters
@@ -74,6 +81,8 @@ interface SystemContextType {
   playerName: string; playerClass: string
   rankChallenge: RankChallenge | null
   userId: string | null
+  avatarUrl: string | null
+  colorTheme: ColorTheme
   addGold: (amount: number) => void
   addXP: (amount: number, category?: StatKey, taskType?: string, taskValue?: number) => void
   updateStats: (updates: Partial<Record<StatKey, number>>) => void
@@ -89,9 +98,11 @@ interface SystemContextType {
   removeRoutine: (id: string) => void
   advanceRankChallenge: () => void
   dismissRankChallenge: () => void
+  setAvatarUrl: (url: string | null) => void
+  setColorTheme: (theme: ColorTheme) => void
+  logTaskToMonthly: (taskType: string, amount: number) => void
 }
 
-// ─── CONSTANTES ──────────────────────────────────────────────────────────────
 export const RANK_PROGRESSION: RankTier[] = [
   'F', 'E-', 'E', 'E+', 'D-', 'D', 'D+', 'C-', 'C', 'C+',
   'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S-', 'S', 'S+', 'SS-', 'SS', 'SS+',
@@ -176,8 +187,9 @@ export function generateRankChallenge(targetRank: RankTier, dominant: StatKey): 
 }
 
 const CHALLENGE_KEY = 'sl_rank_challenge'
+const THEME_KEY = 'sl_color_theme'
+const AVATAR_KEY = 'sl_avatar_url'
 
-// ─── CONTEXT + PROVIDER ──────────────────────────────────────────────────────
 const SystemContext = createContext<SystemContextType | undefined>(undefined)
 
 export function SystemProvider({ children }: { children: React.ReactNode }) {
@@ -205,28 +217,74 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
   const [levelUpData,   setLevelUpData]   = useState({ show: false, level: 0 })
   const [rankChallenge, setRankChallenge] = useState<RankChallenge | null>(null)
   const [loading,       setLoading]       = useState(true)
+  const [avatarUrl,     setAvatarUrlState] = useState<string | null>(null)
+  const [colorTheme,    setColorThemeState] = useState<ColorTheme>('cyan')
   const isInitialized = useRef(false)
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // BUG FIX: staminaMax como constante (não recalculada)
   const staminaMax = 20
   const { rank, rankIndex } = computeRank(level)
 
-  // ── ALERT ──────────────────────────────────────────────────────────────────
   const showAlert = useCallback((msg: string, type: 'success' | 'info' | 'critical' = 'success') => {
     setAlert({ show: true, msg, type })
     setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 4000)
   }, [])
 
-  // ── GERAR QUESTS ──────────────────────────────────────────────────────────
+  const setAvatarUrl = useCallback((url: string | null) => {
+    setAvatarUrlState(url)
+    if (url) localStorage.setItem(AVATAR_KEY, url)
+    else localStorage.removeItem(AVATAR_KEY)
+  }, [])
+
+  const setColorTheme = useCallback((theme: ColorTheme) => {
+    setColorThemeState(theme)
+    localStorage.setItem(THEME_KEY, theme)
+    // Apply CSS variable globally
+    document.documentElement.style.setProperty('--theme-color', THEME_COLORS[theme])
+  }, [])
+
   const generateQuestsForWindow = useCallback(() => {
     const now    = new Date()
-    const block  = Math.floor(now.getHours() / 2)
-    const nextMs = new Date(now).setHours((block + 1) * 2, 0, 0, 0)
+    // Reset at 2am next day
+    const tomorrow2am = new Date()
+    tomorrow2am.setDate(tomorrow2am.getDate() + 1)
+    tomorrow2am.setHours(2, 0, 0, 0)
+    const nextMs = tomorrow2am.getTime()
     const shuffled = [...SYSTEM_QUESTS_POOL].sort(() => Math.random() - 0.5)
     setSystemQuests(shuffled.slice(0, 6).map((q) => ({ ...q, completed: false, expiresAt: nextMs })))
   }, [])
 
-  // ── INIT ───────────────────────────────────────────────────────────────────
+  // Save to Supabase with debounce
+  const scheduleSave = useCallback((data: {
+    uid: string; gold: number; xp: number; level: number; stamina: number
+    stats: Stats; inventory: InventoryItem[]; routines: Routine[]; counters: Counters
+    monthlyLogs: Record<number, MonthLog>; activeBoosts: Record<string, number>
+    avatarUrl: string | null
+  }) => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await supabase.from('players').upsert({
+          id: data.uid,
+          gold: data.gold,
+          xp: data.xp,
+          level: data.level,
+          stamina: data.stamina,
+          stats: data.stats,
+          inventory: data.inventory,
+          routines: data.routines,
+          counters: data.counters,
+          monthly_logs: data.monthlyLogs,
+          active_boosts: data.activeBoosts,
+          avatar_url: data.avatarUrl,
+          updated_at: new Date().toISOString(),
+        })
+      } catch (err) {
+        console.error('[SystemContext] Save failed:', err)
+      }
+    }, 2000)
+  }, [])
+
   useEffect(() => {
     async function init() {
       try {
@@ -251,16 +309,38 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
           if (player.name)          setPlayerName(player.name)
           if (player.class)         setPlayerClass(player.class)
           if (player.active_boosts) setActiveBoosts(player.active_boosts)
+          if (player.avatar_url)    setAvatarUrlState(player.avatar_url)
         }
 
+        // Load theme from localStorage
+        const savedTheme = localStorage.getItem(THEME_KEY) as ColorTheme | null
+        if (savedTheme && ['cyan', 'purple', 'gold'].includes(savedTheme)) {
+          setColorThemeState(savedTheme)
+          document.documentElement.style.setProperty('--theme-color', THEME_COLORS[savedTheme])
+        }
+
+        // Load avatar from localStorage as fallback
+        const savedAvatar = localStorage.getItem(AVATAR_KEY)
+        if (savedAvatar) setAvatarUrlState(savedAvatar)
+
+        // Load rank challenge
         const savedChallenge = localStorage.getItem(`${CHALLENGE_KEY}_${uid}`)
         if (savedChallenge) {
-          try { setRankChallenge(JSON.parse(savedChallenge)) } catch { /* ignora */ }
+          try { setRankChallenge(JSON.parse(savedChallenge)) } catch { /* ignore */ }
         }
 
         generateQuestsForWindow()
+
+        // Check and reset routines if new day
+        const lastResetKey = `sl_routine_reset_${uid}`
+        const lastReset = localStorage.getItem(lastResetKey)
+        const today = new Date().toDateString()
+        if (lastReset !== today) {
+          setRoutines(prev => prev.map(r => ({ ...r, completedToday: false })))
+          localStorage.setItem(lastResetKey, today)
+        }
       } catch (err) {
-        console.error('[SystemContext] Erro ao inicializar:', err)
+        console.error('[SystemContext] Init error:', err)
       } finally {
         setLoading(false)
         isInitialized.current = true
@@ -270,26 +350,14 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── AUTO-SAVE (debounce 3s) ────────────────────────────────────────────────
+  // Auto-save whenever state changes
   useEffect(() => {
     if (!isInitialized.current || !userId) return
-    const timer = setTimeout(async () => {
-      try {
-        await supabase.from('players').upsert({
-          id: userId, gold, xp, level, stamina,
-          stats, inventory, routines, counters,
-          monthly_logs: monthlyLogs, active_boosts: activeBoosts,
-          updated_at: new Date().toISOString(),
-        })
-      } catch (err) {
-        console.error('[SystemContext] Auto-save falhou:', err)
-      }
-    }, 3000)
-    return () => clearTimeout(timer)
+    scheduleSave({ uid: userId, gold, xp, level, stamina, stats, inventory, routines, counters, monthlyLogs, activeBoosts, avatarUrl })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gold, xp, level, stamina, stats, inventory, routines, counters, monthlyLogs, activeBoosts, userId])
+  }, [gold, xp, level, stamina, stats, inventory, routines, counters, monthlyLogs, activeBoosts, userId, avatarUrl])
 
-  // ── PERSISTE RANK CHALLENGE ────────────────────────────────────────────────
+  // Persist rank challenge
   useEffect(() => {
     if (!userId) return
     if (rankChallenge) {
@@ -299,18 +367,15 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     }
   }, [rankChallenge, userId])
 
-  // ── STAMINA REGEN (30min) ──────────────────────────────────────────────────
-  // BUG FIX NOVO: O regen estava mencionado no Header mas nunca implementado.
-  // Adicionado aqui: +1 stamina a cada 30 minutos enquanto a app está aberta.
+  // Stamina regen
   useEffect(() => {
     if (!isInitialized.current) return
     const interval = setInterval(() => {
       setStamina((prev) => Math.min(prev + 1, staminaMax))
-    }, 30 * 60 * 1000) // 30 minutos
+    }, 30 * 60 * 1000)
     return () => clearInterval(interval)
   }, [staminaMax])
 
-  // ── UPDATE MONTH LOG ──────────────────────────────────────────────────────
   const updateMonthLog = useCallback((updates: Partial<MonthLog>) => {
     const month = new Date().getMonth()
     setMonthlyLogs((prev) => {
@@ -323,13 +388,27 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  // ── ADD XP + LEVEL UP + RANK CHALLENGE ────────────────────────────────────
-  // BUG FIX CRÍTICO: O addXP original capturava "level" e "rankIndex" no closure,
-  // o que causava race condition: completar 2 quests rapidamente resultava em
-  // XP perdido porque o segundo disparo usava o level/rankIndex stale.
-  //
-  // SOLUÇÃO: Usa setXp com função de updater + setLevel com função de updater
-  // para garantir que sempre opera no estado mais recente.
+  // New: log specific task data to monthly tracker
+  const logTaskToMonthly = useCallback((taskType: string, amount: number) => {
+    const month = new Date().getMonth()
+    setMonthlyLogs((prev) => {
+      const cur = prev[month] ?? emptyMonthLog()
+      const next = { ...cur }
+      // Map taskType to MonthLog keys
+      const keyMap: Record<string, keyof MonthLog> = {
+        water: 'water', pushups: 'pushups', squats: 'squats',
+        reading: 'reading', meditation: 'meditation', focus: 'focus',
+        bed: 'bed', dishes: 'dishes', stretch: 'stretch', organize: 'organize',
+        missions: 'tasks',
+      }
+      const key = keyMap[taskType]
+      if (key) {
+        next[key] = (cur[key] ?? 0) + amount
+      }
+      return { ...prev, [month]: next }
+    })
+  }, [])
+
   const addXP = useCallback((
     amount: number,
     category?: StatKey,
@@ -345,6 +424,10 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         [taskType]: (prev[taskType] ?? 0) + (taskValue ?? 0),
         missions:   (prev.missions ?? 0) + 1,
       }))
+      // Also update monthly logs for the specific task type
+      if (taskValue && taskType !== 'missions') {
+        logTaskToMonthly(taskType, taskValue)
+      }
     }
 
     if (category) {
@@ -353,7 +436,6 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
     updateMonthLog({ xpGain: final, tasks: 1 })
 
-    // Usa setLevel com updater para evitar stale closure
     setLevel((prevLevel) => {
       const prevRankData = computeRank(prevLevel)
       
@@ -372,7 +454,6 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (leveled) {
-          // Usa setTimeout para evitar setState dentro de setState
           setTimeout(() => {
             setLevelUpData({ show: true, level: lv })
             showAlert(`🏆 LEVEL UP! Nível ${lv} alcançado!`, 'success')
@@ -383,7 +464,13 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
             setStats((currentStats) => {
               const dominant  = getDominantStat(currentStats)
               const challenge = generateRankChallenge(targetRank, dominant)
-              setTimeout(() => setRankChallenge(challenge), 0)
+              // Shadow Army only unlocks at S rank - check if rank >= S
+              const sRankIdx = RANK_PROGRESSION.indexOf('S')
+              if (newRankIdx >= sRankIdx) {
+                setTimeout(() => setRankChallenge(challenge), 0)
+              } else {
+                setTimeout(() => setRankChallenge(challenge), 0)
+              }
               return currentStats
             })
           }
@@ -392,22 +479,16 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         return total
       })
 
-      // Retorna prevLevel aqui; o level real é atualizado internamente
       return prevLevel
     })
-
-    // Após calcular, atualiza o level de fato via setXp callback
-    // Esta abordagem dupla garante atomicidade
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeBoosts, showAlert, updateMonthLog])
+  }, [activeBoosts, showAlert, updateMonthLog, logTaskToMonthly])
 
-  // ── ADD GOLD ──────────────────────────────────────────────────────────────
   const addGold = useCallback((amount: number) => {
     setGold((prev) => prev + amount)
     if (amount > 0) updateMonthLog({ goldGain: amount })
   }, [updateMonthLog])
 
-  // ── UPDATE STATS ──────────────────────────────────────────────────────────
   const updateStats = useCallback((updates: Partial<Record<StatKey, number>>) => {
     setStats((prev) => {
       const next = { ...prev }
@@ -418,7 +499,6 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
-  // ── STAMINA ───────────────────────────────────────────────────────────────
   const consumeStamina = useCallback((): boolean => {
     if (stamina <= 0) {
       showAlert('⚡ EXAUSTÃO CRÍTICA — Aguarde regeneração!', 'critical')
@@ -433,7 +513,6 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     showAlert(`+${amount} Stamina restaurada!`, 'success')
   }, [staminaMax, showAlert])
 
-  // ── ITENS ─────────────────────────────────────────────────────────────────
   const buyItem = useCallback((item: Omit<InventoryItem, 'qty'>) => {
     if (gold < item.price) {
       showAlert(`❌ Gold insuficiente — você tem ${gold.toLocaleString()}G`, 'critical')
@@ -468,7 +547,6 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     )
   }, [inventory, restoreStamina, showAlert])
 
-  // ── QUESTS ────────────────────────────────────────────────────────────────
   const completeSystemQuest = useCallback((questId: string) => {
     setSystemQuests((prev) => prev.map((q) => {
       if (q.id === questId && !q.completed) {
@@ -481,7 +559,6 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [addXP, addGold, showAlert])
 
-  // ── ROTINAS ───────────────────────────────────────────────────────────────
   const addRoutine = useCallback((title: string, category: StatKey) => {
     setRoutines((prev) => [...prev, {
       id: crypto.randomUUID(), title, category, completedToday: false,
@@ -503,7 +580,6 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     setRoutines((prev) => prev.filter((r) => r.id !== id))
   }, [])
 
-  // ── RANK CHALLENGE ────────────────────────────────────────────────────────
   const advanceRankChallenge = useCallback(() => {
     setRankChallenge((prev) => {
       if (!prev || prev.completed) return prev
@@ -518,7 +594,6 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     setRankChallenge((prev) => (prev?.completed ? null : prev))
   }, [])
 
-  // ── LOADING STATE ─────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black flex items-center justify-center z-[99999]">
@@ -543,11 +618,12 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     <SystemContext.Provider value={{
       gold, xp, level, rank, rankIndex, stats, stamina, staminaMax, counters,
       inventory, systemQuests, routines, activeBoosts, alert, levelUpData, monthlyLogs,
-      playerName, playerClass, rankChallenge, userId,
+      playerName, playerClass, rankChallenge, userId, avatarUrl, colorTheme,
       addGold, addXP, updateStats, consumeStamina, restoreStamina,
       buyItem, useItem, showAlert, setLevelUpData, completeSystemQuest,
       addRoutine, completeRoutine, removeRoutine,
       advanceRankChallenge, dismissRankChallenge,
+      setAvatarUrl, setColorTheme, logTaskToMonthly,
     }}>
       {children}
     </SystemContext.Provider>

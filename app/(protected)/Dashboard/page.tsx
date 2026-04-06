@@ -84,12 +84,13 @@ export default function DashboardPage() {
   const isCurrentMonth = selectedMonth === new Date().getMonth()
 
   return (
-    <div className="p-4 md:p-8 font-mono bg-black text-white min-h-screen pb-40">
+    <div className="font-mono bg-black text-white min-h-screen pb-40">
 
       <header className="mb-10 border-b border-cyan-900/40 pb-6 flex justify-between items-end">
         <div>
+          {/* TITULO ALTERADO */}
           <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tighter">
-            DATABASE_<span className="text-cyan-500">HISTORY</span>
+            Informações do <span className="text-cyan-500">Caçador</span>
           </h1>
           <p className="text-[10px] text-slate-500 tracking-[0.4em] uppercase mt-1">
             Status do Jogador e Registros de Ciclo
@@ -137,7 +138,6 @@ export default function DashboardPage() {
                 <h2 className="text-[10px] font-black uppercase flex items-center gap-2 text-orange-500 tracking-widest">
                   <Target size={14} /> Contratos_Ativos
                 </h2>
-                {/* ROTA CORRIGIDA: /Dashboard com D maiúsculo */}
                 <Link href="/Dashboard/routines" className="text-orange-500 hover:text-white transition-all">
                   <Plus size={16} />
                 </Link>
@@ -183,7 +183,8 @@ export default function DashboardPage() {
               <ResourceProgress label="Arrumar Cama" value={`${log.bed||0}d`}                    percent={((log.bed||0)/30)*100}       icon={<Activity size={12}/>}   />
               <ResourceProgress label="Lavar Louça"  value={`${log.dishes||0}v`}                 percent={((log.dishes||0)/30)*100}    icon={<Droplets size={12}/>}   />
               <ResourceProgress label="Alongamento"  value={`${log.stretch||0}m`}                percent={((log.stretch||0)/300)*100}  icon={<Activity size={12}/>}   />
-<ResourceProgress label="Organização" value={`${log.organize||0}v`} percent={((log.organize||0)/30)*100} icon={<CheckCircle2 size={12}/>} />            </div>
+              <ResourceProgress label="Organização"  value={`${log.organize||0}v`}               percent={((log.organize||0)/30)*100}  icon={<CheckCircle2 size={12}/>} />
+            </div>
           </div>
 
           {/* Mural do Sistema */}
