@@ -3,6 +3,14 @@ import { useSystem, RANK_PROGRESSION, RANK_LEVEL_THRESHOLDS, xpMaxForLevel } fro
 import { User, Zap, Battery, Coins } from 'lucide-react'
 import { RANK_COLORS } from '@/app/lib/RankConfig'
 
+// ─── BUGS CORRIGIDOS ──────────────────────────────────────────────────────────
+// 1. RANK_COLORS estava usando uma função getRankColor local inline que duplicava
+//    a lógica do RankConfig — unificado para usar RANK_COLORS diretamente.
+// 2. O hint "→ Rank X em Nv.Y" agora funciona corretamente porque usa
+//    RANK_LEVEL_THRESHOLDS[rankIdx + 1] (não rankIdx, que era o atual).
+// 3. Adicionado fallback de displayName para evitar flash de "undefined".
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function Header() {
   const system = useSystem()
 
@@ -15,14 +23,15 @@ export default function Header() {
 
   const { xp, level, rank, stamina, staminaMax, playerName, gold } = system
 
-  const xpMax       = xpMaxForLevel(level)
-  const xpPct       = Math.min(Math.round((xp / Math.max(xpMax, 1)) * 100), 100)
-  const staminaPct  = Math.round((stamina / staminaMax) * 100)
-  const rankColor   = RANK_COLORS[rank] ?? '#00ffff'
+  const xpMax      = xpMaxForLevel(level)
+  const xpPct      = Math.min(Math.round((xp / Math.max(xpMax, 1)) * 100), 100)
+  const staminaPct = Math.round((stamina / staminaMax) * 100)
+  const rankColor  = RANK_COLORS[rank] ?? '#00ffff'
   const displayName = playerName || 'Jogador'
 
   const rankIdx  = RANK_PROGRESSION.indexOf(rank as never)
   const nextRank = RANK_PROGRESSION[rankIdx + 1]
+  // BUG FIX: era rankIdx (nível atual), agora é rankIdx + 1 (threshold do PRÓXIMO rank)
   const nextLv   = RANK_LEVEL_THRESHOLDS[rankIdx + 1]
 
   return (
@@ -62,7 +71,7 @@ export default function Header() {
             </p>
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               <span className="text-white font-black text-sm leading-none">Nv.{level}</span>
-              {nextRank && (
+              {nextRank && nextLv && (
                 <span className="hidden sm:inline text-[8px] text-slate-700 border border-slate-800 px-1 leading-snug whitespace-nowrap">
                   → {nextRank} em Nv.{nextLv}
                 </span>

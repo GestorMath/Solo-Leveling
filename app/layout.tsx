@@ -1,8 +1,17 @@
 import type { Metadata, Viewport } from 'next'
 import { Share_Tech_Mono } from 'next/font/google'
 import './globals.css'
-import { SystemProvider } from '@/app/context/SystemContext'
 import { ServiceWorkerRegistration } from '@/app/components/ServiceWorkerRegistration'
+
+// ─── BUG CORRIGIDO ────────────────────────────────────────────────────────────
+// O SystemProvider estava aqui E em ClientLayout (via (protected)/layout.tsx)
+// Isso causava DOIS providers aninhados: estado duplicado, re-renders desnecessários
+// e o XP do Header nunca atualizava corretamente em /quests.
+//
+// SOLUÇÃO: SystemProvider removido daqui. Ele permanece APENAS em ClientLayout,
+// que já envolve todas as rotas protegidas. Rotas públicas (auth, intro, onboarding)
+// não precisam do contexto do sistema.
+// ─────────────────────────────────────────────────────────────────────────────
 
 const shareTechMono = Share_Tech_Mono({
   weight: '400',
@@ -42,13 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/icons/icon-180.png" />
       </head>
       <body className="bg-black text-white antialiased font-mono">
-        {/*
-          SystemProvider aqui = disponível em TODAS as rotas.
-          Não repita em (protected)/layout.tsx.
-        */}
-        <SystemProvider>
-          {children}
-        </SystemProvider>
+        {children}
         <ServiceWorkerRegistration />
       </body>
     </html>

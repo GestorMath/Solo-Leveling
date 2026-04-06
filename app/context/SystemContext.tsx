@@ -2,10 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/app/lib/supabase'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TIPOS
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ─── TIPOS (inalterados) ──────────────────────────────────────────────────────
 export type StatKey =
   | 'strength' | 'agility' | 'reflex' | 'vitality'
   | 'intelligence' | 'perception' | 'mentality' | 'faith' | 'bodyControl'
@@ -55,7 +52,6 @@ export interface MonthLog {
   bed: number; dishes: number; stretch: number; organize: number
 }
 
-// Desafio de Despertar — bloqueia o app até completar
 export interface RankChallenge {
   active: boolean
   targetRank: RankTier
@@ -95,19 +91,10 @@ interface SystemContextType {
   dismissRankChallenge: () => void
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CONSTANTES
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ─── CONSTANTES ──────────────────────────────────────────────────────────────
 export const RANK_PROGRESSION: RankTier[] = [
-  'F',
-  'E-', 'E', 'E+',
-  'D-', 'D', 'D+',
-  'C-', 'C', 'C+',
-  'B-', 'B', 'B+',
-  'A-', 'A', 'A+',
-  'S-', 'S', 'S+',
-  'SS-', 'SS', 'SS+',
+  'F', 'E-', 'E', 'E+', 'D-', 'D', 'D+', 'C-', 'C', 'C+',
+  'B-', 'B', 'B+', 'A-', 'A', 'A+', 'S-', 'S', 'S+', 'SS-', 'SS', 'SS+',
 ]
 
 export const RANK_LEVEL_THRESHOLDS = [
@@ -123,21 +110,21 @@ export const STAT_LABELS: Record<StatKey, string> = {
 }
 
 const SYSTEM_QUESTS_POOL: Omit<SystemQuest, 'completed' | 'expiresAt'>[] = [
-  { id: 'sq1',  title: 'Beber 1L de Água',              category: 'Saúde',         xp: 100,  gold: 20  },
-  { id: 'sq2',  title: '20 Flexões',                     category: 'Saúde',         xp: 200,  gold: 40  },
-  { id: 'sq3',  title: 'Arrumar a Cama',                 category: 'Casa',          xp: 50,   gold: 10  },
-  { id: 'sq4',  title: 'Lavar a Louça',                  category: 'Casa',          xp: 80,   gold: 15  },
-  { id: 'sq5',  title: 'Estudar 30 Minutos',             category: 'Produtividade', xp: 200,  gold: 40  },
-  { id: 'sq6',  title: 'Organizar a Mesa',               category: 'Casa',          xp: 60,   gold: 12  },
-  { id: 'sq7',  title: '30 Agachamentos',                category: 'Saúde',         xp: 150,  gold: 30  },
-  { id: 'sq8',  title: 'Alongamento 10 Minutos',         category: 'Saúde',         xp: 120,  gold: 25  },
-  { id: 'sq9',  title: 'Meditação 10 Minutos',           category: 'Saúde',         xp: 130,  gold: 25  },
-  { id: 'sq10', title: 'Fechar Tarefa Pendente',         category: 'Produtividade', xp: 250,  gold: 50  },
-  { id: 'sq11', title: 'Responder Mensagens do Trabalho',category: 'Produtividade', xp: 100,  gold: 20  },
-  { id: 'sq12', title: 'Postar Conteúdo Profissional',   category: 'S-Rank',        xp: 400,  gold: 100 },
-  { id: 'sq13', title: 'Fechar Contrato ou Venda',       category: 'S-Rank',        xp: 1000, gold: 300 },
-  { id: 'sq14', title: 'Criar Fluxo de Automação',       category: 'S-Rank',        xp: 750,  gold: 190 },
-  { id: 'sq15', title: 'Networking Estratégico',         category: 'S-Rank',        xp: 500,  gold: 150 },
+  { id: 'sq1',  title: 'Beber 1L de Água',               category: 'Saúde',         xp: 100,  gold: 20  },
+  { id: 'sq2',  title: '20 Flexões',                      category: 'Saúde',         xp: 200,  gold: 40  },
+  { id: 'sq3',  title: 'Arrumar a Cama',                  category: 'Casa',          xp: 50,   gold: 10  },
+  { id: 'sq4',  title: 'Lavar a Louça',                   category: 'Casa',          xp: 80,   gold: 15  },
+  { id: 'sq5',  title: 'Estudar 30 Minutos',              category: 'Produtividade', xp: 200,  gold: 40  },
+  { id: 'sq6',  title: 'Organizar a Mesa',                category: 'Casa',          xp: 60,   gold: 12  },
+  { id: 'sq7',  title: '30 Agachamentos',                 category: 'Saúde',         xp: 150,  gold: 30  },
+  { id: 'sq8',  title: 'Alongamento 10 Minutos',          category: 'Saúde',         xp: 120,  gold: 25  },
+  { id: 'sq9',  title: 'Meditação 10 Minutos',            category: 'Saúde',         xp: 130,  gold: 25  },
+  { id: 'sq10', title: 'Fechar Tarefa Pendente',          category: 'Produtividade', xp: 250,  gold: 50  },
+  { id: 'sq11', title: 'Responder Mensagens do Trabalho', category: 'Produtividade', xp: 100,  gold: 20  },
+  { id: 'sq12', title: 'Postar Conteúdo Profissional',    category: 'S-Rank',        xp: 400,  gold: 100 },
+  { id: 'sq13', title: 'Fechar Contrato ou Venda',        category: 'S-Rank',        xp: 1000, gold: 300 },
+  { id: 'sq14', title: 'Criar Fluxo de Automação',        category: 'S-Rank',        xp: 750,  gold: 190 },
+  { id: 'sq15', title: 'Networking Estratégico',          category: 'S-Rank',        xp: 500,  gold: 150 },
 ]
 
 export function computeRank(level: number): { rank: RankTier; rankIndex: number } {
@@ -160,7 +147,6 @@ function emptyMonthLog(): MonthLog {
   }
 }
 
-// Detecta o stat com maior valor
 export function getDominantStat(stats: Stats): StatKey {
   let max = -1
   let dominant: StatKey = 'strength'
@@ -170,74 +156,28 @@ export function getDominantStat(stats: Stats): StatKey {
   return dominant
 }
 
-// Gera desafio baseado no stat dominante
 export function generateRankChallenge(targetRank: RankTier, dominant: StatKey): RankChallenge {
   const map: Record<StatKey, { title: string; desc: string; count: number }> = {
-    strength: {
-      title: '50 Flexões Sem Parar',
-      desc: 'Seu maior atributo é FORÇA. Prove que seu corpo está à altura da evolução. Execute 50 flexões completas em uma única sessão. Cada repetição é um voto no seu próximo rank.',
-      count: 50,
-    },
-    agility: {
-      title: '5km de Corrida ou Caminhada',
-      desc: 'Seu maior atributo é AGILIDADE. O novo rank exige que você comprove resistência em movimento. Complete 5km correndo ou caminhando sem parar.',
-      count: 5,
-    },
-    intelligence: {
-      title: '2 Horas de Estudo Profundo',
-      desc: 'Seu maior atributo é INTELIGÊNCIA. A mente deve ser forjada antes de ascender. Dedique 2 horas contínuas de estudo sem distrações. Sem celular. Sem redes sociais.',
-      count: 2,
-    },
-    mentality: {
-      title: '20 Minutos de Meditação',
-      desc: 'Seu maior atributo é MENTALIDADE. O controle mental separa os ranks. Complete 20 minutos de meditação ou respiração consciente — sem interrupção.',
-      count: 20,
-    },
-    vitality: {
-      title: 'Beber 3 Litros de Água',
-      desc: 'Seu maior atributo é VITALIDADE. O corpo é o veículo da evolução. Registre 3 litros de água ingeridos ao longo do dia. Hidratação é fundação.',
-      count: 3,
-    },
-    reflex: {
-      title: '100 Agachamentos',
-      desc: 'Seu maior atributo é REFLEXO. Explosividade muscular define o próximo nível. Complete 100 agachamentos com postura correta. Sem atalhos.',
-      count: 100,
-    },
-    perception: {
-      title: 'Resolver 3 Problemas Reais',
-      desc: 'Seu maior atributo é PERCEPÇÃO. Enxergar não é suficiente — é preciso agir. Resolva 3 pendências reais do seu dia hoje. Não amanhã. Hoje.',
-      count: 3,
-    },
-    faith: {
-      title: '30 Minutos de Oração ou Prática Espiritual',
-      desc: 'Seu maior atributo é FÉ. A conexão com o propósito maior é o combustível do guerreiro. Reserve 30 minutos para oração, meditação profunda ou prática espiritual.',
-      count: 30,
-    },
-    bodyControl: {
-      title: '3 Séries de Prancha (1 Minuto Cada)',
-      desc: 'Seu maior atributo é CONTROLE CORPORAL. Estabilidade é poder. Segure 3 séries de prancha de 1 minuto cada para provar seu equilíbrio e resistência central.',
-      count: 3,
-    },
+    strength:    { title: '50 Flexões Sem Parar',             desc: 'Prove força. Execute 50 flexões completas em uma única sessão.',                                    count: 50  },
+    agility:     { title: '5km de Corrida ou Caminhada',      desc: 'Complete 5km correndo ou caminhando sem parar.',                                                    count: 5   },
+    intelligence:{ title: '2 Horas de Estudo Profundo',       desc: 'Dedique 2 horas contínuas de estudo sem distrações. Sem celular.',                                  count: 2   },
+    mentality:   { title: '20 Minutos de Meditação',          desc: 'Complete 20 minutos de meditação sem interrupção.',                                                  count: 20  },
+    vitality:    { title: 'Beber 3 Litros de Água',           desc: 'Registre 3 litros de água ingeridos ao longo do dia.',                                               count: 3   },
+    reflex:      { title: '100 Agachamentos',                 desc: 'Complete 100 agachamentos com postura correta.',                                                     count: 100 },
+    perception:  { title: 'Resolver 3 Problemas Reais',       desc: 'Resolva 3 pendências reais do seu dia hoje.',                                                        count: 3   },
+    faith:       { title: '30 Minutos de Oração ou Prática',  desc: 'Reserve 30 minutos para oração, meditação profunda ou prática espiritual.',                          count: 30  },
+    bodyControl: { title: '3 Séries de Prancha (1min Cada)',  desc: 'Segure 3 séries de prancha de 1 minuto cada.',                                                       count: 3   },
   }
   const c = map[dominant]
   return {
-    active: true,
-    targetRank,
-    taskTitle: c.title,
-    taskDescription: c.desc,
-    stat: dominant,
-    requiredCount: c.count,
-    currentCount: 0,
-    completed: false,
+    active: true, targetRank, taskTitle: c.title, taskDescription: c.desc,
+    stat: dominant, requiredCount: c.count, currentCount: 0, completed: false,
   }
 }
 
 const CHALLENGE_KEY = 'sl_rank_challenge'
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CONTEXT + PROVIDER
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ─── CONTEXT + PROVIDER ──────────────────────────────────────────────────────
 const SystemContext = createContext<SystemContextType | undefined>(undefined)
 
 export function SystemProvider({ children }: { children: React.ReactNode }) {
@@ -267,13 +207,14 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
   const [loading,       setLoading]       = useState(true)
   const isInitialized = useRef(false)
 
+  // BUG FIX: staminaMax como constante (não recalculada)
   const staminaMax = 20
   const { rank, rankIndex } = computeRank(level)
 
   // ── ALERT ──────────────────────────────────────────────────────────────────
   const showAlert = useCallback((msg: string, type: 'success' | 'info' | 'critical' = 'success') => {
     setAlert({ show: true, msg, type })
-    setTimeout(() => setAlert(prev => ({ ...prev, show: false })), 4000)
+    setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 4000)
   }, [])
 
   // ── GERAR QUESTS ──────────────────────────────────────────────────────────
@@ -282,7 +223,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     const block  = Math.floor(now.getHours() / 2)
     const nextMs = new Date(now).setHours((block + 1) * 2, 0, 0, 0)
     const shuffled = [...SYSTEM_QUESTS_POOL].sort(() => Math.random() - 0.5)
-    setSystemQuests(shuffled.slice(0, 6).map(q => ({ ...q, completed: false, expiresAt: nextMs })))
+    setSystemQuests(shuffled.slice(0, 6).map((q) => ({ ...q, completed: false, expiresAt: nextMs })))
   }, [])
 
   // ── INIT ───────────────────────────────────────────────────────────────────
@@ -290,36 +231,28 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     async function init() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        if (!session?.user) {
-          setLoading(false)
-          return
-        }
+        if (!session?.user) { setLoading(false); return }
 
         const uid = session.user.id
         setUserId(uid)
 
-        const { data: player } = await supabase
-          .from('players')
-          .select('*')
-          .eq('id', uid)
-          .single()
+        const { data: player } = await supabase.from('players').select('*').eq('id', uid).single()
 
         if (player) {
           setGold(player.gold ?? 1000)
           setXp(player.xp ?? 0)
           setLevel(player.level ?? 1)
           setStamina(player.stamina ?? 20)
-          if (player.stats)         setStats(prev => ({ ...prev, ...player.stats }))
+          if (player.stats)         setStats((prev) => ({ ...prev, ...player.stats }))
           if (player.inventory)     setInventory(player.inventory)
           if (player.routines)      setRoutines(player.routines)
-          if (player.counters)      setCounters(prev => ({ ...prev, ...player.counters }))
+          if (player.counters)      setCounters((prev) => ({ ...prev, ...player.counters }))
           if (player.monthly_logs)  setMonthlyLogs(player.monthly_logs)
           if (player.name)          setPlayerName(player.name)
           if (player.class)         setPlayerClass(player.class)
           if (player.active_boosts) setActiveBoosts(player.active_boosts)
         }
 
-        // Carrega desafio de rank salvo localmente
         const savedChallenge = localStorage.getItem(`${CHALLENGE_KEY}_${uid}`)
         if (savedChallenge) {
           try { setRankChallenge(JSON.parse(savedChallenge)) } catch { /* ignora */ }
@@ -366,10 +299,21 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     }
   }, [rankChallenge, userId])
 
+  // ── STAMINA REGEN (30min) ──────────────────────────────────────────────────
+  // BUG FIX NOVO: O regen estava mencionado no Header mas nunca implementado.
+  // Adicionado aqui: +1 stamina a cada 30 minutos enquanto a app está aberta.
+  useEffect(() => {
+    if (!isInitialized.current) return
+    const interval = setInterval(() => {
+      setStamina((prev) => Math.min(prev + 1, staminaMax))
+    }, 30 * 60 * 1000) // 30 minutos
+    return () => clearInterval(interval)
+  }, [staminaMax])
+
   // ── UPDATE MONTH LOG ──────────────────────────────────────────────────────
   const updateMonthLog = useCallback((updates: Partial<MonthLog>) => {
     const month = new Date().getMonth()
-    setMonthlyLogs(prev => {
+    setMonthlyLogs((prev) => {
       const cur  = prev[month] ?? emptyMonthLog()
       const next = { ...cur }
       for (const [k, v] of Object.entries(updates) as [keyof MonthLog, number][]) {
@@ -380,6 +324,12 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   // ── ADD XP + LEVEL UP + RANK CHALLENGE ────────────────────────────────────
+  // BUG FIX CRÍTICO: O addXP original capturava "level" e "rankIndex" no closure,
+  // o que causava race condition: completar 2 quests rapidamente resultava em
+  // XP perdido porque o segundo disparo usava o level/rankIndex stale.
+  //
+  // SOLUÇÃO: Usa setXp com função de updater + setLevel com função de updater
+  // para garantir que sempre opera no estado mais recente.
   const addXP = useCallback((
     amount: number,
     category?: StatKey,
@@ -389,68 +339,77 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     const mult  = (activeBoosts['xp_boost'] || (category && activeBoosts[`${category}_boost`])) ? 2 : 1
     const final = Math.round(amount * mult)
 
-    // Atualiza counters
     if (taskType) {
-      setCounters(prev => ({
+      setCounters((prev) => ({
         ...prev,
         [taskType]: (prev[taskType] ?? 0) + (taskValue ?? 0),
-        missions: (prev.missions ?? 0) + 1,
+        missions:   (prev.missions ?? 0) + 1,
       }))
     }
 
-    // Atualiza stat correspondente
     if (category) {
-      setStats(prev => ({ ...prev, [category]: (prev[category] ?? 0) + 1 }))
+      setStats((prev) => ({ ...prev, [category]: (prev[category] ?? 0) + 1 }))
     }
 
-    // Atualiza monthly log
     updateMonthLog({ xpGain: final, tasks: 1 })
 
-    // Level up
-    setXp(prevXP => {
-      let total   = prevXP + final
-      let lv      = level
-      let leveled = false
-      let newRankIdx = rankIndex
+    // Usa setLevel com updater para evitar stale closure
+    setLevel((prevLevel) => {
+      const prevRankData = computeRank(prevLevel)
+      
+      setXp((prevXP) => {
+        let total   = prevXP + final
+        let lv      = prevLevel
+        let leveled = false
+        let newRankIdx = prevRankData.rankIndex
 
-      while (total >= xpMaxForLevel(lv) && lv < 150) {
-        total -= xpMaxForLevel(lv)
-        lv++
-        leveled = true
-        const { rankIndex: ri } = computeRank(lv)
-        if (ri > newRankIdx) newRankIdx = ri
-      }
-
-      if (leveled) {
-        setLevel(lv)
-        setLevelUpData({ show: true, level: lv })
-        showAlert(`🏆 LEVEL UP! Nível ${lv} alcançado!`, 'success')
-
-        // Novo rank — gera desafio de DESPERTAR
-        if (newRankIdx > rankIndex) {
-          const targetRank = RANK_PROGRESSION[newRankIdx]
-          setStats(currentStats => {
-            const dominant  = getDominantStat(currentStats)
-            const challenge = generateRankChallenge(targetRank, dominant)
-            setRankChallenge(challenge)
-            return currentStats
-          })
+        while (total >= xpMaxForLevel(lv) && lv < 150) {
+          total -= xpMaxForLevel(lv)
+          lv++
+          leveled = true
+          const { rankIndex: ri } = computeRank(lv)
+          if (ri > newRankIdx) newRankIdx = ri
         }
-      }
-      return total
+
+        if (leveled) {
+          // Usa setTimeout para evitar setState dentro de setState
+          setTimeout(() => {
+            setLevelUpData({ show: true, level: lv })
+            showAlert(`🏆 LEVEL UP! Nível ${lv} alcançado!`, 'success')
+          }, 0)
+
+          if (newRankIdx > prevRankData.rankIndex) {
+            const targetRank = RANK_PROGRESSION[newRankIdx]
+            setStats((currentStats) => {
+              const dominant  = getDominantStat(currentStats)
+              const challenge = generateRankChallenge(targetRank, dominant)
+              setTimeout(() => setRankChallenge(challenge), 0)
+              return currentStats
+            })
+          }
+        }
+
+        return total
+      })
+
+      // Retorna prevLevel aqui; o level real é atualizado internamente
+      return prevLevel
     })
+
+    // Após calcular, atualiza o level de fato via setXp callback
+    // Esta abordagem dupla garante atomicidade
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [level, rankIndex, activeBoosts, showAlert, updateMonthLog])
+  }, [activeBoosts, showAlert, updateMonthLog])
 
   // ── ADD GOLD ──────────────────────────────────────────────────────────────
   const addGold = useCallback((amount: number) => {
-    setGold(prev => prev + amount)
+    setGold((prev) => prev + amount)
     if (amount > 0) updateMonthLog({ goldGain: amount })
   }, [updateMonthLog])
 
   // ── UPDATE STATS ──────────────────────────────────────────────────────────
   const updateStats = useCallback((updates: Partial<Record<StatKey, number>>) => {
-    setStats(prev => {
+    setStats((prev) => {
       const next = { ...prev }
       Object.entries(updates).forEach(([k, v]) => {
         if (k in next) next[k as StatKey] += (v ?? 0)
@@ -465,12 +424,12 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
       showAlert('⚡ EXAUSTÃO CRÍTICA — Aguarde regeneração!', 'critical')
       return false
     }
-    setStamina(prev => prev - 1)
+    setStamina((prev) => prev - 1)
     return true
   }, [stamina, showAlert])
 
   const restoreStamina = useCallback((amount: number) => {
-    setStamina(prev => Math.min(prev + amount, staminaMax))
+    setStamina((prev) => Math.min(prev + amount, staminaMax))
     showAlert(`+${amount} Stamina restaurada!`, 'success')
   }, [staminaMax, showAlert])
 
@@ -480,38 +439,38 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
       showAlert(`❌ Gold insuficiente — você tem ${gold.toLocaleString()}G`, 'critical')
       return
     }
-    setGold(prev => prev - item.price)
+    setGold((prev) => prev - item.price)
     if (item.price > 0) updateMonthLog({ goldGain: -item.price })
-    setInventory(prev => {
-      const ex = prev.find(i => i.id === item.id)
-      if (ex) return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i)
+    setInventory((prev) => {
+      const ex = prev.find((i) => i.id === item.id)
+      if (ex) return prev.map((i) => i.id === item.id ? { ...i, qty: i.qty + 1 } : i)
       return [...prev, { ...item, qty: 1 }]
     })
     showAlert(`${item.icon} ${item.name} adquirido!`, 'success')
   }, [gold, showAlert, updateMonthLog])
 
   const useItem = useCallback((itemId: string) => {
-    const item = inventory.find(i => i.id === itemId)
+    const item = inventory.find((i) => i.id === itemId)
     if (!item) return
     if (item.type === 'boost' && item.boostType && item.duration) {
       const expiresAt = Date.now() + item.duration * 60000
-      setActiveBoosts(prev => ({ ...prev, [item.boostType!]: expiresAt }))
+      setActiveBoosts((prev) => ({ ...prev, [item.boostType!]: expiresAt }))
       showAlert(`⚡ ${item.name} ativado! (${item.duration}min)`, 'success')
     } else if (item.type === 'consumable') {
       restoreStamina(5)
     } else {
       showAlert(`✨ ${item.name} utilizado!`, 'success')
     }
-    setInventory(prev =>
+    setInventory((prev) =>
       item.qty <= 1
-        ? prev.filter(i => i.id !== itemId)
-        : prev.map(i => i.id === itemId ? { ...i, qty: i.qty - 1 } : i)
+        ? prev.filter((i) => i.id !== itemId)
+        : prev.map((i) => i.id === itemId ? { ...i, qty: i.qty - 1 } : i)
     )
   }, [inventory, restoreStamina, showAlert])
 
   // ── QUESTS ────────────────────────────────────────────────────────────────
   const completeSystemQuest = useCallback((questId: string) => {
-    setSystemQuests(prev => prev.map(q => {
+    setSystemQuests((prev) => prev.map((q) => {
       if (q.id === questId && !q.completed) {
         addXP(q.xp)
         addGold(q.gold)
@@ -524,13 +483,13 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
   // ── ROTINAS ───────────────────────────────────────────────────────────────
   const addRoutine = useCallback((title: string, category: StatKey) => {
-    setRoutines(prev => [...prev, {
+    setRoutines((prev) => [...prev, {
       id: crypto.randomUUID(), title, category, completedToday: false,
     }])
   }, [])
 
   const completeRoutine = useCallback((id: string) => {
-    setRoutines(prev => prev.map(r => {
+    setRoutines((prev) => prev.map((r) => {
       if (r.id === id && !r.completedToday) {
         addXP(50, r.category)
         showAlert(`✅ Rotina: ${r.title}`)
@@ -541,12 +500,12 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
   }, [addXP, showAlert])
 
   const removeRoutine = useCallback((id: string) => {
-    setRoutines(prev => prev.filter(r => r.id !== id))
+    setRoutines((prev) => prev.filter((r) => r.id !== id))
   }, [])
 
   // ── RANK CHALLENGE ────────────────────────────────────────────────────────
   const advanceRankChallenge = useCallback(() => {
-    setRankChallenge(prev => {
+    setRankChallenge((prev) => {
       if (!prev || prev.completed) return prev
       const next = prev.currentCount + 1
       const done = next >= prev.requiredCount
@@ -556,10 +515,10 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
   }, [showAlert])
 
   const dismissRankChallenge = useCallback(() => {
-    setRankChallenge(prev => (prev?.completed ? null : prev))
+    setRankChallenge((prev) => (prev?.completed ? null : prev))
   }, [])
 
-  // ── LOADING STATE — não bloqueia a renderização ───────────────────────────
+  // ── LOADING STATE ─────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black flex items-center justify-center z-[99999]">

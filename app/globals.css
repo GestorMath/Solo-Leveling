@@ -1,10 +1,48 @@
 @import "tailwindcss";
 
-/* ── VARIÁVEIS ──────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────────────────
+ * BUG CRÍTICO CORRIGIDO: Tailwind v4 NÃO usa tailwind.config.ts
+ * A configuração migrou para CSS-first com @theme.
+ * O arquivo tailwind.config.ts estava sendo IGNORADO completamente,
+ * o que significa que as cores game-cyan, game-purple, game-gold
+ * e as animações arise + chain-shake NÃO estavam sendo aplicadas.
+ *
+ * SOLUÇÃO: Toda a config de tema foi movida para cá via @theme.
+ * O arquivo tailwind.config.ts pode ser deletado com segurança.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
+@theme {
+  /* Cores customizadas do jogo */
+  --color-game-cyan:   #00ffff;
+  --color-game-purple: #9944ff;
+  --color-game-gold:   #ffdd00;
+
+  /* Fonte mono custom */
+  --font-mono: 'Share Tech Mono', 'Courier New', monospace;
+
+  /* Animações */
+  --animate-arise:       ariseAnim 0.8s ease-in-out infinite alternate;
+  --animate-chain-shake: chainShake 0.5s ease-in-out infinite;
+}
+
+/* Keyframes das animações (obrigatório declarar separado do @theme) */
+@keyframes ariseAnim {
+  0%   { text-shadow: 0 0 20px rgba(0,255,255,0.5); }
+  100% { text-shadow: 0 0 60px rgba(0,255,255,1), 0 0 100px rgba(147,51,234,0.8); }
+}
+
+@keyframes chainShake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-2px); }
+  75%       { transform: translateX(2px); }
+}
+
+/* ── VARIÁVEIS CSS (mantidas para compatibilidade com código existente) ────── */
 :root {
-  --color-cyan: #00ffff;
+  --color-cyan:   #00ffff;
   --color-purple: #9944ff;
-  --color-gold: #ffdd00;
+  --color-gold:   #ffdd00;
 }
 
 /* ── BASE ───────────────────────────────────────────────────────────────────── */
