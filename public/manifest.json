@@ -1,39 +1,27 @@
 {
   "name": "Solo Leveling — Sistema de Evolução",
-  "short_name": "Arise",
-  "description": "Gamifique sua vida real. Complete missões, suba de nível, construa hábitos.",
+  "short_name": "Projeto S",
+  "description": "Gamifique sua vida. Evolua todos os dias.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#000000",
-  "theme_color": "#000000",
+  "theme_color": "#00ffff",
   "orientation": "portrait-primary",
   "lang": "pt-BR",
-  "categories": ["lifestyle", "productivity", "health", "fitness"],
+  "categories": ["productivity", "lifestyle"],
   "icons": [
-    { "src": "/icons/icon-72.png",  "sizes": "72x72",   "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-96.png",  "sizes": "96x96",   "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-152.png", "sizes": "152x152", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
-  ],
-  "shortcuts": [
     {
-      "name": "Missões",
-      "short_name": "Quests",
-      "description": "Ver missões diárias",
-      "url": "/quests",
-      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
     },
     {
-      "name": "Dungeon",
-      "short_name": "Focus",
-      "description": "Modo de foco",
-      "url": "/dungeon",
-      "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }]
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
     }
   ]
 }
