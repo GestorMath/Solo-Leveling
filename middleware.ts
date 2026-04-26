@@ -1,14 +1,10 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// ─── MIDDLEWARE CORRIGIDO ──────────────────────────────────────────────────────
-// BUGS CORRIGIDOS:
-// 1. Arquivo renomeado de proxy.ts → middleware.ts (Next.js ignorava completamente)
-// 2. Função renomeada de "proxy" → "middleware" (export obrigatório)
-// 3. Tratamento de erro no getUser() (evita redirect loop em falha de rede)
-// 4. Lógica simplificada com early return (elimina if aninhados desnecessários)
-// 5. Tipagem corrigida: usa CookieOptions do @supabase/ssr (compatível com Next.js 16)
-// ─────────────────────────────────────────────────────────────────────────────
+const VALID_CLASSES = [
+  'executor', 'arquiteto', 'infiltrador', 'alquimista',
+  'sentinela', 'oraculo', 'ferreiro', 'monarca', 'vagabundo',
+]
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -24,7 +20,6 @@ export async function middleware(request: NextRequest) {
           return request.cookies.get(name)?.value
         },
         set(name: string, value: string, options: CookieOptions) {
-          // Next.js 16: cookies são imutáveis no request — aplicamos só no response
           response = NextResponse.next({ request: { headers: request.headers } })
           response.cookies.set(name, value, options)
         },
@@ -38,22 +33,20 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Rotas públicas (não requerem autenticação)
   const isPublicRoute = ['/', '/intro', '/auth', '/auth/callback', '/callback'].some(
-    (r) => pathname === r || pathname.startsWith(r + '/')
+    r => pathname === r || pathname.startsWith(r + '/')
   )
   const isOnboardingRoute = pathname === '/onboarding'
 
-  // Obtém usuário com tratamento de erro (evita redirect loop em falha de rede)
+  // SEMPRE usar getUser() — valida sessão no servidor, não confia em cookie JWT local
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-  // Falha de infraestrutura: não bloqueia o usuário, apenas passa
   if (authError && authError.message !== 'Auth session missing!') {
     console.error('[Middleware] Auth error:', authError.message)
     return response
   }
 
-  // ── USUÁRIO NÃO AUTENTICADO ──────────────────────────────────────────────────
+  // ── USUÁRIO NÃO AUTENTICADO ────────────────────────────────────────────────
   if (!user) {
     if (!isPublicRoute && !isOnboardingRoute) {
       return NextResponse.redirect(new URL('/auth', request.url))
@@ -61,10 +54,14 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // ── USUÁRIO AUTENTICADO ──────────────────────────────────────────────────────
+  // ── USUÁRIO AUTENTICADO ────────────────────────────────────────────────────
 
-  // Cache do player_class em cookie para evitar N+1 queries por request
-  let playerClass = request.cookies.get('player_class')?.value
+  // SEC-03: Validar o cookie de classe contra lista de valores permitidos.
+  // Cookie não-validado ou com valor desconhecido é descartado e o banco é consultado.
+  const cachedClass = request.cookies.get('player_class')?.value
+  const cacheIsValid = !!cachedClass && VALID_CLASSES.includes(cachedClass)
+
+  let playerClass = cacheIsValid ? cachedClass : null
 
   if (!playerClass) {
     const { data: player } = await supabase
@@ -73,21 +70,21 @@ export async function middleware(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    playerClass = player?.class ?? undefined
+    playerClass = player?.class ?? null
 
-    if (playerClass) {
+    if (playerClass && VALID_CLASSES.includes(playerClass)) {
       response.cookies.set('player_class', playerClass, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7, // 7 dias
+        sameSite: 'strict',
+        maxAge: 60 * 60 * 24, // 24h
       })
     }
   }
 
   const hasClass = Boolean(playerClass)
 
-  // Sem classe → força onboarding (exceto se já estiver nele ou em rota pública)
+  // Sem classe → forçar onboarding
   if (!hasClass) {
     if (!isOnboardingRoute && !isPublicRoute) {
       return NextResponse.redirect(new URL('/onboarding', request.url))
@@ -95,7 +92,7 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // Com classe → redireciona rotas públicas/onboarding para dashboard
+  // Com classe → redirecionar rotas públicas/onboarding para dashboard
   const isCallbackRoute = pathname === '/auth/callback'
   if ((isOnboardingRoute || isPublicRoute) && !isCallbackRoute) {
     return NextResponse.redirect(new URL('/Dashboard', request.url))
