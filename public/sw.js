@@ -1,168 +1,198 @@
-// Solo Leveling PWA - Service Worker v2
-// ARQUIVO: public/sw.js  (JavaScript puro, NÃO TypeScript)
+// public/sw.js — Solo Leveling PWA Service Worker
+// Cache version: bump este número a cada deploy para invalidar o cache antigo
+const CACHE_VERSION = 'sl-v1'
+const STATIC_CACHE  = `${CACHE_VERSION}-static`
+const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`
 
-const CACHE_NAME = 'solo-leveling-v2'
-const DATA_CACHE = 'solo-leveling-data-v2'
-const OFFLINE_PAGE = '/offline'
-
+// Assets que sempre devem estar em cache (shell do app)
 const STATIC_ASSETS = [
   '/',
-  '/offline',
-  '/intro',
   '/manifest.json',
+  '/offline.html',
 ]
 
-// ── INSTALL ──────────────────────────────────────────────────────────────────
-self.addEventListener('install', (event) => {
+// Domínios que nunca devem ser interceptados pelo SW (auth, APIs externas)
+const BYPASS_DOMAINS = [
+  'supabase.co',
+  'googleapis.com',
+  'accounts.google.com',
+]
+
+// ── Install ────────────────────────────────────────────────────────────────────
+
+self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
+    caches.open(STATIC_CACHE)
       .then(cache => cache.addAll(STATIC_ASSETS))
-      .catch(err => console.warn('[SW] Cache install warning:', err))
+      .catch(err => console.warn('[SW] Install cache error:', err))
   )
+  // Ativa imediatamente sem esperar tabs fecharem
   self.skipWaiting()
 })
 
-// ── ACTIVATE ─────────────────────────────────────────────────────────────────
-self.addEventListener('activate', (event) => {
+// ── Activate ───────────────────────────────────────────────────────────────────
+
+self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
         keys
-          .filter(k => k !== CACHE_NAME && k !== DATA_CACHE)
-          .map(k => caches.delete(k))
+          .filter(key => key !== STATIC_CACHE && key !== DYNAMIC_CACHE)
+          .map(key => {
+            console.log('[SW] Deleting old cache:', key)
+            return caches.delete(key)
+          })
       )
     )
   )
+  // Assume controle de todas as tabs imediatamente
   self.clients.claim()
 })
 
-// ── PUSH NOTIFICATIONS ────────────────────────────────────────────────────────
-self.addEventListener('push', (event) => {
-  if (!event.data) return
+// ── Fetch ──────────────────────────────────────────────────────────────────────
 
-  let data = {}
-  try {
-    data = event.data.json()
-  } catch {
-    data = { title: 'Solo Leveling', body: event.data.text() }
-  }
-
-  const options = {
-    body: data.body || 'Suas missões aguardam, Caçador.',
-    icon: data.icon || '/icons/icon-192x192.png',
-    badge: '/icons/icon-72x72.png',
-    vibrate: [100, 50, 100],
-    data: { url: data.url || '/' },
-    actions: [
-      { action: 'open', title: '⚔️ Acessar' },
-      { action: 'close', title: 'Dispensar' },
-    ],
-  }
-
-  event.waitUntil(
-    self.registration.showNotification(data.title || '⚔️ Solo Leveling', options)
-  )
-})
-
-// ── NOTIFICATION CLICK ────────────────────────────────────────────────────────
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close()
-  if (event.action === 'close') return
-
-  const url = event.notification.data?.url || '/'
-
-  event.waitUntil(
-    self.clients
-      .matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
-        for (const client of clientList) {
-          if (client.url.includes(self.location.origin) && 'focus' in client) {
-            client.navigate(url)
-            return client.focus()
-          }
-        }
-        return self.clients.openWindow(url)
-      })
-  )
-})
-
-// ── FETCH ─────────────────────────────────────────────────────────────────────
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', event => {
   const { request } = event
   const url = new URL(request.url)
 
-  // Ignora tudo que não é GET
+  // Ignorar requests que não são GET
   if (request.method !== 'GET') return
-  // Supabase sempre vai para a rede
-  if (url.hostname.includes('supabase.co')) return
-  // Google fonts
-  if (url.hostname.includes('googleapis.com')) return
-  if (url.hostname.includes('gstatic.com')) return
 
-  // API routes → Network-First (dados sempre frescos)
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request))
-    return
-  }
+  // Ignorar extensões do browser e protocolos especiais
+  if (!url.protocol.startsWith('http')) return
 
-  // Assets estáticos do Next.js → Cache-First (nunca mudam)
+  // Ignorar domínios externos críticos (Supabase, Google OAuth, etc.)
+  if (BYPASS_DOMAINS.some(d => url.hostname.includes(d))) return
+
+  // Ignorar Next.js HMR e DevTools
+  if (url.pathname.startsWith('/_next/webpack-hmr')) return
+  if (url.pathname.startsWith('/__nextjs')) return
+
+  // ── Estratégia por tipo de recurso ──────────────────────────────────────────
+
+  // Assets estáticos do Next.js (_next/static) — Cache First, imutáveis
   if (url.pathname.startsWith('/_next/static/')) {
-    event.respondWith(cacheFirst(request))
+    event.respondWith(cacheFirst(request, STATIC_CACHE))
     return
   }
 
-  // Páginas HTML → Stale-While-Revalidate (mostra rápido, atualiza em background)
+  // Fontes e ícones — Cache First
+  if (
+    url.pathname.match(/\.(woff|woff2|ttf|otf|eot)$/) ||
+    url.pathname.startsWith('/icons/') ||
+    url.pathname === '/manifest.json'
+  ) {
+    event.respondWith(cacheFirst(request, STATIC_CACHE))
+    return
+  }
+
+  // Imagens — Stale While Revalidate
+  if (url.pathname.match(/\.(png|jpg|jpeg|gif|webp|svg|ico)$/)) {
+    event.respondWith(staleWhileRevalidate(request, DYNAMIC_CACHE))
+    return
+  }
+
+  // Páginas HTML — Network First com fallback para offline
   if (request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(staleWhileRevalidate(request))
+    event.respondWith(networkFirstWithOfflineFallback(request))
     return
   }
 
-  // Todo o resto → Cache-First com fallback
-  event.respondWith(cacheFirst(request))
+  // Tudo mais — Network First
+  event.respondWith(networkFirst(request, DYNAMIC_CACHE))
 })
 
-// ── ESTRATÉGIAS DE CACHE ──────────────────────────────────────────────────────
-async function cacheFirst(request) {
+// ── Estratégias de cache ───────────────────────────────────────────────────────
+
+/** Cache First: serve do cache, só busca na rede se não existir */
+async function cacheFirst(request, cacheName) {
   const cached = await caches.match(request)
   if (cached) return cached
   try {
     const response = await fetch(request)
     if (response.ok) {
-      const cache = await caches.open(CACHE_NAME)
+      const cache = await caches.open(cacheName)
       cache.put(request, response.clone())
     }
     return response
   } catch {
-    const offline = await caches.match(OFFLINE_PAGE)
-    return offline || new Response('Offline', { status: 503 })
+    return new Response('Offline', { status: 503 })
   }
 }
 
-async function networkFirst(request) {
+/** Network First: tenta rede primeiro, fallback para cache */
+async function networkFirst(request, cacheName) {
   try {
     const response = await fetch(request)
     if (response.ok) {
-      const cache = await caches.open(DATA_CACHE)
+      const cache = await caches.open(cacheName)
       cache.put(request, response.clone())
     }
     return response
   } catch {
     const cached = await caches.match(request)
-    return cached || new Response(JSON.stringify({ error: 'offline' }), {
+    return cached || new Response('Offline', { status: 503 })
+  }
+}
+
+/** Network First para HTML com fallback para /offline.html */
+async function networkFirstWithOfflineFallback(request) {
+  try {
+    const response = await fetch(request)
+    if (response.ok) {
+      const cache = await caches.open(DYNAMIC_CACHE)
+      cache.put(request, response.clone())
+    }
+    return response
+  } catch {
+    const cached = await caches.match(request)
+    if (cached) return cached
+    // Fallback para página offline customizada
+    const offline = await caches.match('/offline.html')
+    return offline || new Response('<h1>Offline</h1>', {
       status: 503,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/html' },
     })
   }
 }
 
-async function staleWhileRevalidate(request) {
-  const cache = await caches.open(CACHE_NAME)
-  const cached = await cache.match(request)
-
-  const networkPromise = fetch(request).then(response => {
+/** Stale While Revalidate: serve cache enquanto atualiza em background */
+async function staleWhileRevalidate(request, cacheName) {
+  const cache    = await caches.open(cacheName)
+  const cached   = await cache.match(request)
+  const fetchPromise = fetch(request).then(response => {
     if (response.ok) cache.put(request, response.clone())
     return response
   }).catch(() => null)
 
-  return cached || await networkPromise || new Response('Offline', { status: 503 })
+  return cached || await fetchPromise || new Response('Offline', { status: 503 })
 }
+
+// ── Push Notifications ─────────────────────────────────────────────────────────
+
+self.addEventListener('push', event => {
+  if (!event.data) return
+  const data = event.data.json()
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Solo Leveling', {
+      body:    data.body    || '',
+      icon:    data.icon    || '/icons/icon-192x192.png',
+      badge:   data.badge   || '/icons/badge-72x72.png',
+      data:    data.url     || '/',
+      vibrate: [200, 100, 200],
+      tag:     data.tag     || 'sl-notification',
+    })
+  )
+})
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close()
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      const url = event.notification.data || '/'
+      const existing = list.find(c => c.url === url && 'focus' in c)
+      if (existing) return existing.focus()
+      return clients.openWindow(url)
+    })
+  )
+})
