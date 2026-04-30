@@ -1,6 +1,9 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// ⭐ LINHA MÁGICA: Força o Edge Runtime (crucial para funcionar)
+export const runtime = 'edge'
+
 const VALID_CLASSES = [
   'executor', 'arquiteto', 'infiltrador', 'alquimista',
   'sentinela', 'oraculo', 'ferreiro', 'monarca', 'vagabundo',
@@ -38,59 +41,66 @@ export async function middleware(request: NextRequest) {
   )
   const isOnboardingRoute = pathname === '/onboarding'
 
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  // ⭐ ENVOLVA EM TRY-CATCH para evitar falhas catastróficas
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
 
-  if (authError && authError.message !== 'Auth session missing!') {
-    console.error('[Middleware] Auth error:', authError.message)
+    if (authError && authError.message !== 'Auth session missing!') {
+      console.error('[Middleware] Auth error:', authError.message)
+      return response
+    }
+
+    if (!user) {
+      if (!isPublicRoute && !isOnboardingRoute) {
+        return NextResponse.redirect(new URL('/auth', request.url))
+      }
+      return response
+    }
+
+    const cachedClass = request.cookies.get('player_class')?.value
+    const cacheIsValid = !!cachedClass && VALID_CLASSES.includes(cachedClass)
+
+    let playerClass = cacheIsValid ? cachedClass : null
+
+    if (!playerClass) {
+      const { data: player } = await supabase
+        .from('players')
+        .select('class')
+        .eq('id', user.id)
+        .single()
+
+      playerClass = player?.class ?? null
+
+      if (playerClass && VALID_CLASSES.includes(playerClass)) {
+        response.cookies.set('player_class', playerClass, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
+          maxAge: 60 * 60 * 24,
+        })
+      }
+    }
+
+    const hasClass = Boolean(playerClass)
+
+    if (!hasClass) {
+      if (!isOnboardingRoute && !isPublicRoute) {
+        return NextResponse.redirect(new URL('/onboarding', request.url))
+      }
+      return response
+    }
+
+    const isCallbackRoute = pathname === '/auth/callback'
+    if ((isOnboardingRoute || isPublicRoute) && !isCallbackRoute) {
+      return NextResponse.redirect(new URL('/Dashboard', request.url))
+    }
+
+    return response
+  } catch (error) {
+    // ⭐ SE QUALQUER COISA DER ERRO, LOGUE E DEIXA PASSAR (não quebra o app)
+    console.error('[Middleware] Unexpected error:', error)
     return response
   }
-
-  if (!user) {
-    if (!isPublicRoute && !isOnboardingRoute) {
-      return NextResponse.redirect(new URL('/auth', request.url))
-    }
-    return response
-  }
-
-  const cachedClass = request.cookies.get('player_class')?.value
-  const cacheIsValid = !!cachedClass && VALID_CLASSES.includes(cachedClass)
-
-  let playerClass = cacheIsValid ? cachedClass : null
-
-  if (!playerClass) {
-    const { data: player } = await supabase
-      .from('players')
-      .select('class')
-      .eq('id', user.id)
-      .single()
-
-    playerClass = player?.class ?? null
-
-    if (playerClass && VALID_CLASSES.includes(playerClass)) {
-      response.cookies.set('player_class', playerClass, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 60 * 60 * 24,
-      })
-    }
-  }
-
-  const hasClass = Boolean(playerClass)
-
-  if (!hasClass) {
-    if (!isOnboardingRoute && !isPublicRoute) {
-      return NextResponse.redirect(new URL('/onboarding', request.url))
-    }
-    return response
-  }
-
-  const isCallbackRoute = pathname === '/auth/callback'
-  if ((isOnboardingRoute || isPublicRoute) && !isCallbackRoute) {
-    return NextResponse.redirect(new URL('/Dashboard', request.url))
-  }
-
-  return response
 }
 
 export const config = {
