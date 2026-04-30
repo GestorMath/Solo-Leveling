@@ -1,4 +1,6 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 import { useSystem, RANK_PROGRESSION } from '@/app/context/SystemContext'
 import { useState, useEffect } from 'react'
 import { Skull, Plus, X, Loader2, Lock } from 'lucide-react'

@@ -1,4 +1,6 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 import { useSystem } from '@/app/context/SystemContext'
 import { MASTER_ITEM_DATABASE } from '@/data/items'
 import { Coins, Clock, Zap, Lock, CheckCircle, Filter, ShoppingCart } from 'lucide-react'

@@ -1,4 +1,8 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
+
+// ... resto do código
 import { useState, useEffect, useCallback } from 'react'
 import { Bell, BellOff, Check, CheckCheck, Trash2, Filter, Zap, Sword, Settings, AlertTriangle } from 'lucide-react'
 
