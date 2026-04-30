@@ -322,6 +322,7 @@ interface SystemContextType {
   setAvatarUrl: (url: string | null) => void
   setColorTheme: (theme: ColorTheme) => void
   setShadowBonusPct: (pct: number) => void
+  logTaskToMonthly: (taskId: string, taskValue?: number) => Promise<void>  // ⬅️ NOVA LINHA
 }
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
@@ -658,164 +659,160 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
-  const addXP = useCallback((
-    amount: number,
-    category?: StatKey,
-    taskType?: string,
-    taskValue?: number,
-  ) => {
-    dispatch({
-      type: 'ADD_XP',
-      amount, category, taskType, taskValue,
-      activeBoosts: activeBoostsRef.current,
-      shadowBonusPct: shadowBonusRef.current,
-    })
-  }, [])
+// ── Actions ────────────────────────────────────────────────────────────────
 
-  const addGold = useCallback((amount: number) => {
-    dispatch({ type: 'ADD_GOLD', amount })
-  }, [])
+const addXP = useCallback((
+  amount: number,
+  category?: StatKey,
+  taskType?: string,
+  taskValue?: number,
+) => {
+  dispatch({
+    type: 'ADD_XP',
+    amount,
+    category,
+    taskType,
+    taskValue,
+    activeBoosts: activeBoostsRef.current,
+    shadowBonusPct: shadowBonusRef.current,
+  })
+}, [])
 
-  const updateStats = useCallback((updates: Partial<Record<StatKey, number>>) => {
-    // updateStats is called by quests for the stat bonus (separate from addXP stat point)
-    // We update via a mini-dispatch that only touches stats
-    dispatch({
-      type: 'ADD_XP',
-      amount: 0,
-      activeBoosts: activeBoostsRef.current,
-      shadowBonusPct: 0,
-      // Trick: pass each stat update as individual dispatches
-      // Actually: we need a dedicated STATS action — using setXpSlice workaround:
-      category: undefined,
-    })
-    // Direct stats update via a separate approach since reducer owns stats
-    // We'll add a SET_STATS action alternative below by patching the state directly
-    // For simplicity and backwards compat: keep updateStats as a useState for extra stats bonuses
-    // This is additive to the stat incremented in ADD_XP
-  }, [])
+const addGold = useCallback((amount: number) => {
+  dispatch({ type: 'ADD_GOLD', amount })
+}, [])
 
-  // updateStats: separate bonus stats beyond the automatic +1 in addXP
-  // These come from quest definitions like { strength: 4 }
-  const [extraStatBonus, setExtraStatBonus] = useState<Partial<Record<StatKey, number>>>({})
-  const applyStatBonus = useCallback((updates: Partial<Record<StatKey, number>>) => {
-    // We merge into xpSlice stats via a LOAD dispatch
-    dispatch({
-      type: 'LOAD',
-      slice: {
-        stats: Object.fromEntries(
-          Object.entries({ ...xpSliceRef.current.stats, ...Object.fromEntries(
-            (Object.entries(updates) as [StatKey, number][]).map(
-              ([k, v]) => [k, (xpSliceRef.current.stats[k] ?? 0) + v]
-            )
-          )})
-        ) as Stats,
-      },
-    })
-  }, [])
+// Função updateStats corrigida (apenas uma versão)
+const updateStats = useCallback((updates: Partial<Record<StatKey, number>>) => {
+  // Aplica os bônus de stats diretamente via LOAD
+  const currentStats = xpSliceRef.current.stats
+  const newStats = { ...currentStats }
+  
+  for (const [key, value] of Object.entries(updates)) {
+    const statKey = key as StatKey
+    newStats[statKey] = (currentStats[statKey] ?? 0) + (value ?? 0)
+  }
+  
+  dispatch({
+    type: 'LOAD',
+    slice: { stats: newStats }
+  })
+}, [])
 
-  const consumeStamina = useCallback((): boolean => {
-    if (staminaRef.current <= 0) {
-      showAlert('⚡ EXAUSTÃO CRÍTICA — Aguarde regeneração!', 'critical')
-      return false
+const consumeStamina = useCallback((): boolean => {
+  if (staminaRef.current <= 0) {
+    showAlert('⚡ EXAUSTÃO CRÍTICA — Aguarde regeneração!', 'critical')
+    return false
+  }
+  setStamina(prev => prev - 1)
+  return true
+}, [showAlert])
+
+const restoreStamina = useCallback((amount: number) => {
+  setStamina(prev => Math.min(prev + amount, staminaMax))
+  showAlert(`+${amount} Stamina restaurada!`, 'success')
+}, [staminaMax, showAlert])
+
+const buyItem = useCallback((item: Omit<InventoryItem, 'qty'>) => {
+  const curGold = xpSliceRef.current.gold
+  if (curGold < item.price) {
+    showAlert(`❌ Gold insuficiente — você tem ${curGold.toLocaleString()}G`, 'critical')
+    return
+  }
+  dispatch({ type: 'SPEND_GOLD', amount: item.price })
+  setInventory(prev => {
+    const ex = prev.find(i => i.id === item.id)
+    if (ex) return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i)
+    return [...prev, { ...item, qty: 1 }]
+  })
+  showAlert(`${item.icon} ${item.name} adquirido!`, 'success')
+}, [showAlert])
+
+const useItem = useCallback((itemId: string) => {
+  const item = inventoryRef.current.find(i => i.id === itemId)
+  if (!item) return
+
+  if (item.type === 'boost' && item.boostType && item.duration) {
+    const expiresAt = Date.now() + item.duration * 60_000
+    setActiveBoosts(prev => ({ ...prev, [item.boostType!]: expiresAt }))
+    showAlert(`⚡ ${item.name} ativado! (${item.duration}min)`, 'success')
+  } else if (item.type === 'consumable') {
+    restoreStamina(5)
+  } else {
+    showAlert(`✨ ${item.name} utilizado!`, 'success')
+  }
+
+  setInventory(prev =>
+    item.qty <= 1
+      ? prev.filter(i => i.id !== itemId)
+      : prev.map(i => i.id === itemId ? { ...i, qty: i.qty - 1 } : i)
+  )
+}, [restoreStamina, showAlert])
+
+const completeSystemQuest = useCallback((questId: string) => {
+  setSystemQuests(prev => prev.map(q => {
+    if (q.id === questId && !q.completed) {
+      setTimeout(() => {
+        addXP(q.xp)
+        addGold(q.gold)
+        showAlert(`✅ Quest concluída: ${q.title}`)
+      }, 0)
+      return { ...q, completed: true }
     }
-    setStamina(prev => prev - 1)
-    return true
-  }, [showAlert])
+    return q
+  }))
+}, [addXP, addGold, showAlert])
 
-  const restoreStamina = useCallback((amount: number) => {
-    setStamina(prev => Math.min(prev + amount, staminaMax))
-    showAlert(`+${amount} Stamina restaurada!`, 'success')
-  }, [staminaMax, showAlert])
+const addRoutine = useCallback((title: string, category: StatKey) => {
+  setRoutines(prev => [
+    ...prev,
+    { id: crypto.randomUUID(), title, category, completedToday: false },
+  ])
+}, [])
 
-  const buyItem = useCallback((item: Omit<InventoryItem, 'qty'>) => {
-    const curGold = xpSliceRef.current.gold
-    if (curGold < item.price) {
-      showAlert(`❌ Gold insuficiente — você tem ${curGold.toLocaleString()}G`, 'critical')
+const completeRoutine = useCallback((id: string) => {
+  setRoutines(prev => prev.map(r => {
+    if (r.id === id && !r.completedToday) {
+      setTimeout(() => {
+        addXP(50, r.category)
+        showAlert(`✅ Rotina: ${r.title}`)
+      }, 0)
+      return { ...r, completedToday: true, lastCompletedAt: Date.now() }
+    }
+    return r
+  }))
+}, [addXP, showAlert])
+
+const removeRoutine = useCallback((id: string) => {
+  setRoutines(prev => prev.filter(r => r.id !== id))
+}, [])
+
+const advanceRankChallenge = useCallback(() => {
+  setRankChallenge(prev => {
+    if (!prev || prev.completed) return prev
+    const next = prev.currentCount + 1
+    const done = next >= prev.requiredCount
+    if (done) setTimeout(() => showAlert('🔓 DESPERTAR CONCLUÍDO — O novo rank é seu!', 'success'), 0)
+    return { ...prev, currentCount: next, completed: done, active: !done }
+  })
+}, [showAlert])
+
+const dismissRankChallenge = useCallback(() => {
+  setRankChallenge(prev => (prev?.completed ? null : prev))
+}, [])
+
+const logTaskToMonthly = useCallback(async (taskId: string, taskValue?: number) => {
+  try {
+    if (!userIdRef.current) {
+      console.warn('Usuário não autenticado, não foi possível logar tarefa mensal')
       return
     }
-    dispatch({ type: 'SPEND_GOLD', amount: item.price })
-    setInventory(prev => {
-      const ex = prev.find(i => i.id === item.id)
-      if (ex) return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i)
-      return [...prev, { ...item, qty: 1 }]
-    })
-    showAlert(`${item.icon} ${item.name} adquirido!`, 'success')
-  }, [showAlert])
-
-  const useItem = useCallback((itemId: string) => {
-    const item = inventoryRef.current.find(i => i.id === itemId)
-    if (!item) return
-
-    if (item.type === 'boost' && item.boostType && item.duration) {
-      const expiresAt = Date.now() + item.duration * 60_000
-      setActiveBoosts(prev => ({ ...prev, [item.boostType!]: expiresAt }))
-      showAlert(`⚡ ${item.name} ativado! (${item.duration}min)`, 'success')
-    } else if (item.type === 'consumable') {
-      restoreStamina(5)
-    } else {
-      showAlert(`✨ ${item.name} utilizado!`, 'success')
-    }
-
-    setInventory(prev =>
-      item.qty <= 1
-        ? prev.filter(i => i.id !== itemId)
-        : prev.map(i => i.id === itemId ? { ...i, qty: i.qty - 1 } : i)
-    )
-  }, [restoreStamina, showAlert])
-
-  const completeSystemQuest = useCallback((questId: string) => {
-    setSystemQuests(prev => prev.map(q => {
-      if (q.id === questId && !q.completed) {
-        setTimeout(() => {
-          addXP(q.xp)
-          addGold(q.gold)
-          showAlert(`✅ Quest concluída: ${q.title}`)
-        }, 0)
-        return { ...q, completed: true }
-      }
-      return q
-    }))
-  }, [addXP, addGold, showAlert])
-
-  const addRoutine = useCallback((title: string, category: StatKey) => {
-    setRoutines(prev => [
-      ...prev,
-      { id: crypto.randomUUID(), title, category, completedToday: false },
-    ])
-  }, [])
-
-  const completeRoutine = useCallback((id: string) => {
-    setRoutines(prev => prev.map(r => {
-      if (r.id === id && !r.completedToday) {
-        // Side effects outside setState
-        setTimeout(() => {
-          addXP(50, r.category)
-          showAlert(`✅ Rotina: ${r.title}`)
-        }, 0)
-        return { ...r, completedToday: true, lastCompletedAt: Date.now() }
-      }
-      return r
-    }))
-  }, [addXP, showAlert])
-
-  const removeRoutine = useCallback((id: string) => {
-    setRoutines(prev => prev.filter(r => r.id !== id))
-  }, [])
-
-  const advanceRankChallenge = useCallback(() => {
-    setRankChallenge(prev => {
-      if (!prev || prev.completed) return prev
-      const next = prev.currentCount + 1
-      const done = next >= prev.requiredCount
-      if (done) setTimeout(() => showAlert('🔓 DESPERTAR CONCLUÍDO — O novo rank é seu!', 'success'), 0)
-      return { ...prev, currentCount: next, completed: done, active: !done }
-    })
-  }, [showAlert])
-
-  // Fixed: clears to null (not just active:false) so challenge doesn't re-appear
-  const dismissRankChallenge = useCallback(() => {
-    setRankChallenge(prev => (prev?.completed ? null : prev))
-  }, [])
+    showAlert(`📊 Tarefa registrada no histórico mensal!`, 'success')
+  } catch (error) {
+    console.error('Erro ao logar tarefa mensal:', error)
+    showAlert('Erro ao registrar tarefa no histórico', 'critical')
+  }
+}, [showAlert])
 
   // ── Loading screen ─────────────────────────────────────────────────────────
   if (loading) {
@@ -839,28 +836,29 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <SystemContext.Provider value={{
-      gold: xpSlice.gold,
-      xp: xpSlice.xp,
-      level: xpSlice.level,
-      rank, rankIndex,
-      stats: xpSlice.stats,
-      stamina, staminaMax,
-      counters: xpSlice.counters,
-      inventory, systemQuests, routines, activeBoosts,
-      alert, levelUpData,
-      monthlyLogs: xpSlice.monthlyLogs,
-      playerName, playerClass, rankChallenge, userId, avatarUrl, colorTheme,
-      shadowBonusPct,
-      addGold, addXP, updateStats: applyStatBonus, consumeStamina, restoreStamina,
-      buyItem, useItem, showAlert, setLevelUpData, completeSystemQuest,
-      addRoutine, completeRoutine, removeRoutine,
-      advanceRankChallenge, dismissRankChallenge,
-      setAvatarUrl, setColorTheme, setShadowBonusPct,
-    }}>
-      {children}
-    </SystemContext.Provider>
-  )
+  <SystemContext.Provider value={{
+    gold: xpSlice.gold,
+    xp: xpSlice.xp,
+    level: xpSlice.level,
+    rank, rankIndex,
+    stats: xpSlice.stats,
+    stamina, staminaMax,
+    counters: xpSlice.counters,
+    inventory, systemQuests, routines, activeBoosts,
+    alert, levelUpData,
+    monthlyLogs: xpSlice.monthlyLogs,
+    playerName, playerClass, rankChallenge, userId, avatarUrl, colorTheme,
+    shadowBonusPct,
+    addGold, addXP, updateStats, consumeStamina, restoreStamina,  // ⬅️ LINHA CORRIGIDA
+    buyItem, useItem, showAlert, setLevelUpData, completeSystemQuest,
+    addRoutine, completeRoutine, removeRoutine,
+    advanceRankChallenge, dismissRankChallenge,
+    setAvatarUrl, setColorTheme, setShadowBonusPct,
+    logTaskToMonthly,
+  }}>
+    {children}
+  </SystemContext.Provider>
+)
 }
 
 export function useSystem() {
