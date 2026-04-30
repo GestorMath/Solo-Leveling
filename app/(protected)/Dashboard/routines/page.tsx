@@ -1,9 +1,14 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
+
 import { useState } from 'react'
 import { useSystem } from '@/app/context/SystemContext'
 import { type StatKey } from '@/app/context/SystemContext'
 import { Plus, Trash2, ArrowLeft, Check } from 'lucide-react'
 import Link from 'next/link'
+
+// ... resto do código igual
 
 const CATEGORIAS: { key: StatKey; label: string; color: string }[] = [
   { key: 'strength',     label: 'Força',              color: '#ff4466' },
