@@ -1,8 +1,8 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// ⭐ LINHA MÁGICA: Força o Edge Runtime (crucial para funcionar)
-export const runtime = 'edge'
+// ⭐ CORREÇÃO: Use 'experimental-edge' no Next.js 16.2.2
+export const runtime = 'experimental-edge'
 
 const VALID_CLASSES = [
   'executor', 'arquiteto', 'infiltrador', 'alquimista',
@@ -41,7 +41,6 @@ export async function middleware(request: NextRequest) {
   )
   const isOnboardingRoute = pathname === '/onboarding'
 
-  // ⭐ ENVOLVA EM TRY-CATCH para evitar falhas catastróficas
   try {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
@@ -97,7 +96,6 @@ export async function middleware(request: NextRequest) {
 
     return response
   } catch (error) {
-    // ⭐ SE QUALQUER COISA DER ERRO, LOGUE E DEIXA PASSAR (não quebra o app)
     console.error('[Middleware] Unexpected error:', error)
     return response
   }
