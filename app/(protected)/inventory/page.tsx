@@ -1,4 +1,6 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 import { useSystem } from '@/app/context/SystemContext'
 import { Package, Box, Play } from 'lucide-react'
 

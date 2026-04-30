@@ -1,4 +1,6 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 import { useSystem, RANK_PROGRESSION, RANK_LEVEL_THRESHOLDS } from '@/app/context/SystemContext'
 import { RANK_COLORS, RANK_NAMES } from '@/app/lib/RankConfig'
 import { useState, useEffect } from 'react'

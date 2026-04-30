@@ -1,4 +1,6 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/app/lib/supabase'
 import { Trophy, Crown, User, Filter } from 'lucide-react'

@@ -1,4 +1,6 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/app/lib/supabase' // ML-01: singleton
