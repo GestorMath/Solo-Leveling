@@ -2,14 +2,18 @@
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
-// ... resto do código
 import { useState, useEffect, useCallback } from 'react'
-import { Bell, BellOff, Check, CheckCheck, Trash2, Filter, Zap, Sword, Settings, AlertTriangle } from 'lucide-react'
+import {
+  Bell, BellOff, Check, CheckCheck, Trash2,
+  Zap, Sword, AlertTriangle, ShoppingBag, Timer,
+} from 'lucide-react'
 
-type NotifType = 'quest' | 'sistema' | 'rank' | 'shop' | 'dungeon'
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type NotifType = 'quest' | 'sistema' | 'rank' | 'shop' | 'dungeon'
 type FilterTab = 'todas' | 'nao-lidas' | 'quests' | 'sistema'
 
-interface Notif {
+export interface Notif {
   id: string
   type: NotifType
   title: string
@@ -18,8 +22,11 @@ interface Notif {
   createdAt: number
 }
 
+// ─── Storage helpers ──────────────────────────────────────────────────────────
+
 const STORAGE_KEY = 'sl_notifications'
-const MAX_NOTIFS = 200
+const MAX_NOTIFS  = 200
+const SEED_KEY    = 'sl_notifications_seeded' // FIX: evita seed duplicado
 
 function loadNotifs(): Notif[] {
   try {
@@ -34,25 +41,37 @@ function saveNotifs(notifs: Notif[]) {
   } catch { /* silêncio */ }
 }
 
-/** Chamada de fora para inserir notificação */
+// ─── API pública — chamar de qualquer parte do app ───────────────────────────
+
+/**
+ * Dispara uma notificação no sistema.
+ * Usar em: LevelUpModal, DespertarModal, dungeon (complete), quests (complete).
+ *
+ * Exemplo:
+ *   import { pushNotification } from '@/app/(protected)/notifications/page'
+ *   pushNotification({ type: 'sistema', title: 'Level Up!', body: 'Você chegou ao nível 10.' })
+ */
 export function pushNotification(n: Omit<Notif, 'id' | 'read' | 'createdAt'>) {
   const notifs = loadNotifs()
   const newN: Notif = {
     ...n,
-    id: Math.random().toString(36).substr(2, 9),
-    read: false,
+    id:        crypto.randomUUID(),
+    read:      false,
     createdAt: Date.now(),
   }
   saveNotifs([newN, ...notifs])
-  window.dispatchEvent(new Event('sl_new_notification'))
+  // Avisar a página de notificações (se estiver aberta) para atualizar
+  try { window.dispatchEvent(new Event('sl_new_notification')) } catch { /* sw context */ }
 }
 
+// ─── Config visual ────────────────────────────────────────────────────────────
+
 const TYPE_ICONS: Record<NotifType, React.ReactNode> = {
-  quest:   <Sword   size={14} className="text-yellow-400" />,
-  sistema: <Zap     size={14} className="text-cyan-400"   />,
+  quest:   <Sword       size={14} className="text-yellow-400" />,
+  sistema: <Zap         size={14} className="text-cyan-400"   />,
   rank:    <AlertTriangle size={14} className="text-purple-400" />,
-  shop:    <Filter  size={14} className="text-green-400"  />,
-  dungeon: <Bell    size={14} className="text-red-400"    />,
+  shop:    <ShoppingBag size={14} className="text-green-400"  />,
+  dungeon: <Timer       size={14} className="text-red-400"    />,
 }
 
 const TYPE_LABELS: Record<NotifType, string> = {
@@ -63,11 +82,35 @@ const TYPE_COLORS: Record<NotifType, string> = {
   quest: '#eab308', sistema: '#00ffff', rank: '#a855f7', shop: '#44ff88', dungeon: '#ff4466',
 }
 
+// FIX: seed de boas-vindas — só aplica na primeira vez
+const SEED_NOTIFS: Omit<Notif, 'id' | 'read' | 'createdAt'>[] = [
+  {
+    type:  'sistema',
+    title: 'Bem-vindo ao Sistema',
+    body:  'Seu perfil foi criado. Complete missões diárias para evoluir seu rank.',
+  },
+  {
+    type:  'quest',
+    title: 'Missões diárias disponíveis',
+    body:  'Novas missões foram carregadas. Complete para ganhar XP e Gold.',
+  },
+  {
+    type:  'rank',
+    title: 'Sistema de Rank ativo',
+    body:  'Você está no Rank F. Evolua completando missões e alcance o Rank S.',
+  },
+  {
+    type:  'shop',
+    title: 'Loja S-Rank aberta',
+    body:  'A loja rotativa tem novos itens disponíveis. A rotação ocorre às 02:00.',
+  },
+]
+
 function timeAgo(ts: number): string {
   const diff = Date.now() - ts
-  const min  = Math.floor(diff / 60000)
-  const h    = Math.floor(diff / 3600000)
-  const d    = Math.floor(diff / 86400000)
+  const min  = Math.floor(diff / 60_000)
+  const h    = Math.floor(diff / 3_600_000)
+  const d    = Math.floor(diff / 86_400_000)
   if (min < 1)  return 'agora'
   if (min < 60) return `${min}min atrás`
   if (h < 24)   return `${h}h atrás`
@@ -75,17 +118,12 @@ function timeAgo(ts: number): string {
   return new Date(ts).toLocaleDateString('pt-BR')
 }
 
-const SEED_NOTIFS: Omit<Notif, 'id' | 'read' | 'createdAt'>[] = [
-  { type: 'sistema', title: 'Bem-vindo ao Sistema',         body: 'Seu perfil foi criado. Complete o onboarding e comece a evoluir.' },
-  { type: 'quest',   title: 'Missões diárias disponíveis',  body: 'Novas missões foram carregadas. Complete para ganhar XP e Gold.' },
-  { type: 'rank',    title: 'Sistema de Rank ativo',        body: 'Você está no Rank F. Evolua completando missões diariamente.' },
-  { type: 'shop',    title: 'Loja S-Rank aberta',           body: 'A loja rotativa tem novos itens disponíveis a cada hora.' },
-]
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function NotificationCenterPage() {
-  const [mounted, setMounted]   = useState(false)
-  const [notifs, setNotifs]     = useState<Notif[]>([])
-  const [filter, setFilter]     = useState<FilterTab>('todas')
+  const [mounted,  setMounted]  = useState(false)
+  const [notifs,   setNotifs]   = useState<Notif[]>([])
+  const [filter,   setFilter]   = useState<FilterTab>('todas')
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const refresh = useCallback(() => {
@@ -95,31 +133,33 @@ export default function NotificationCenterPage() {
   useEffect(() => {
     setMounted(true)
 
-    // Carrega notifs salvas
     const saved = loadNotifs()
 
-    // Se não há nenhuma (primeira vez), semeia com notificações de boas-vindas
-    if (saved.length === 0) {
+    // FIX: seed só uma vez — verificar flag no localStorage
+    const alreadySeeded = localStorage.getItem(SEED_KEY)
+    if (!alreadySeeded && saved.length === 0) {
       const seeded: Notif[] = SEED_NOTIFS.map((n, i) => ({
         ...n,
-        id: `seed_${i}`,
-        read: false,
-        createdAt: Date.now() - i * 3600000,
+        id:        `seed_${i}`,
+        read:      false,
+        createdAt: Date.now() - i * 3_600_000,
       }))
       saveNotifs(seeded)
+      localStorage.setItem(SEED_KEY, '1')
       setNotifs(seeded)
     } else {
       setNotifs(saved)
+      if (!alreadySeeded) localStorage.setItem(SEED_KEY, '1')
     }
 
-    // Escuta novas notifs inseridas externamente
     window.addEventListener('sl_new_notification', refresh)
     return () => window.removeEventListener('sl_new_notification', refresh)
   }, [refresh])
 
   if (!mounted) return null
 
-  // ── Filtros ──────────────────────────────────────────────────────────────
+  // ── Filtros ───────────────────────────────────────────────────────────────
+
   const filtered = notifs.filter(n => {
     if (filter === 'nao-lidas') return !n.read
     if (filter === 'quests')   return n.type === 'quest'
@@ -130,31 +170,37 @@ export default function NotificationCenterPage() {
   const unreadCount = notifs.filter(n => !n.read).length
 
   // ── Ações ─────────────────────────────────────────────────────────────────
+
   function markRead(id: string) {
     const updated = notifs.map(n => n.id === id ? { ...n, read: true } : n)
-    setNotifs(updated); saveNotifs(updated)
+    setNotifs(updated)
+    saveNotifs(updated)
   }
 
   function markAllRead() {
     const updated = notifs.map(n => ({ ...n, read: true }))
-    setNotifs(updated); saveNotifs(updated)
+    setNotifs(updated)
+    saveNotifs(updated)
     setSelected(new Set())
   }
 
   function deleteNotif(id: string) {
     const updated = notifs.filter(n => n.id !== id)
-    setNotifs(updated); saveNotifs(updated)
+    setNotifs(updated)
+    saveNotifs(updated)
     setSelected(prev => { const s = new Set(prev); s.delete(id); return s })
   }
 
   function deleteSelected() {
     const updated = notifs.filter(n => !selected.has(n.id))
-    setNotifs(updated); saveNotifs(updated)
+    setNotifs(updated)
+    saveNotifs(updated)
     setSelected(new Set())
   }
 
   function clearAll() {
-    setNotifs([]); saveNotifs([])
+    setNotifs([])
+    saveNotifs([])
     setSelected(new Set())
   }
 
@@ -167,7 +213,7 @@ export default function NotificationCenterPage() {
   }
 
   function toggleSelectAll() {
-    if (selected.size === filtered.length) {
+    if (selected.size === filtered.length && filtered.length > 0) {
       setSelected(new Set())
     } else {
       setSelected(new Set(filtered.map(n => n.id)))
@@ -187,11 +233,12 @@ export default function NotificationCenterPage() {
       {/* Header */}
       <header className="mb-8 border-b border-cyan-900/30 pb-6 flex flex-col md:flex-row justify-between md:items-end gap-4">
         <div>
-          <p className="text-[9px] text-slate-600 tracking-[0.5em] uppercase mb-2">// Tela 10 — Central de Notificações</p>
-          <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tight">
+          <p className="text-[9px] text-slate-600 tracking-[0.5em] uppercase mb-2">// Central de Notificações</p>
+          <h1 className="text-2xl md:text-3xl font-black italic uppercase tracking-tight flex items-center gap-3">
+            <Bell size={22} className="text-cyan-500" />
             Notificações
             {unreadCount > 0 && (
-              <span className="ml-3 text-sm font-black bg-cyan-500 text-black px-2 py-0.5">
+              <span className="text-sm font-black bg-cyan-500 text-black px-2 py-0.5">
                 {unreadCount}
               </span>
             )}
@@ -205,7 +252,7 @@ export default function NotificationCenterPage() {
               onClick={markAllRead}
               className="flex items-center gap-1.5 px-3 py-2 border border-cyan-900/40 text-cyan-600 font-bold text-[9px] uppercase tracking-widest hover:border-cyan-500 hover:text-cyan-400 transition-all"
             >
-              <CheckCheck size={12} /> Marcar todas lidas
+              <CheckCheck size={12} /> Marcar lidas
             </button>
           )}
           {selected.size > 0 && (
@@ -249,7 +296,9 @@ export default function NotificationCenterPage() {
         <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
           <BellOff size={40} className="text-slate-800" />
           <p className="text-[10px] text-slate-700 uppercase tracking-widest font-black">
-            {filter === 'nao-lidas' ? '// Nenhuma notificação não lida' : '// Nenhuma notificação'}
+            {filter === 'nao-lidas'
+              ? '// Nenhuma notificação não lida'
+              : '// Nenhuma notificação'}
           </p>
         </div>
       )}
@@ -286,14 +335,16 @@ export default function NotificationCenterPage() {
                   ? 'border-cyan-500/40 bg-cyan-950/10'
                   : !n.read
                     ? 'border-slate-700/60 bg-slate-900/40 hover:border-slate-600'
-                    : 'border-slate-900/60 bg-slate-950/20 opacity-60 hover:opacity-80'
+                    : 'border-slate-900/60 opacity-60 hover:opacity-80'
               }`}
             >
               {/* Checkbox */}
               <button
                 onClick={e => { e.stopPropagation(); toggleSelect(n.id) }}
                 className={`mt-0.5 flex-shrink-0 w-4 h-4 border flex items-center justify-center transition-all ${
-                  isSelected ? 'border-cyan-500 bg-cyan-500/20' : 'border-slate-700 hover:border-slate-500'
+                  isSelected
+                    ? 'border-cyan-500 bg-cyan-500/20'
+                    : 'border-slate-700 hover:border-slate-500'
                 }`}
               >
                 {isSelected && <Check size={10} className="text-cyan-400" />}
@@ -307,7 +358,7 @@ export default function NotificationCenterPage() {
                 />
               )}
 
-              {/* Ícone do tipo */}
+              {/* Ícone */}
               <div className="flex-shrink-0 mt-0.5">
                 {TYPE_ICONS[n.type]}
               </div>
@@ -318,7 +369,9 @@ export default function NotificationCenterPage() {
                   <p className={`font-black text-sm leading-tight ${!n.read ? 'text-white' : 'text-slate-500'}`}>
                     {n.title}
                   </p>
-                  <span className="text-[8px] text-slate-700 flex-shrink-0 mt-0.5">{timeAgo(n.createdAt)}</span>
+                  <span className="text-[8px] text-slate-700 flex-shrink-0 mt-0.5">
+                    {timeAgo(n.createdAt)}
+                  </span>
                 </div>
                 <p className="text-[9px] text-slate-500 mt-1 leading-relaxed">{n.body}</p>
                 <span
