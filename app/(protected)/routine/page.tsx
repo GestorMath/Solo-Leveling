@@ -1,4 +1,8 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
+
+// ... resto do código
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { toast } from 'sonner'
