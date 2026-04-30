@@ -1,4 +1,8 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
+
+// ... resto dos seus imports e código
 import { useState, useEffect } from 'react'
 import { useSystem } from '@/app/context/SystemContext'
 import {
