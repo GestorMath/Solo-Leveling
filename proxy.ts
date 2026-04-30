@@ -6,7 +6,7 @@ const VALID_CLASSES = [
   'sentinela', 'oraculo', 'ferreiro', 'monarca', 'vagabundo',
 ]
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({
     request: { headers: request.headers },
   })
@@ -42,7 +42,7 @@ export async function middleware(request: NextRequest) {
   const { data: { user }, error: authError } = await supabase.auth.getUser()
 
   if (authError && authError.message !== 'Auth session missing!') {
-    console.error('[Middleware] Auth error:', authError.message)
+    console.error('[Proxy] Auth error:', authError.message)
     return response
   }
 
