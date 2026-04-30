@@ -1,4 +1,6 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 import { useSystem } from '../context/SystemContext'
 import { Zap, Timer } from 'lucide-react'
 import { useState, useEffect } from 'react'

@@ -1,4 +1,6 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 import { useSystem, xpMaxForLevel } from '../context/SystemContext'
 import { TrendingUp } from 'lucide-react'
 

@@ -1,4 +1,6 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 import { useSystem, RANK_PROGRESSION, RANK_LEVEL_THRESHOLDS, xpMaxForLevel, THEME_COLORS } from '../context/SystemContext'
 import { User, Zap, Battery, Coins } from 'lucide-react'
 import { RANK_COLORS } from '@/app/lib/RankConfig'

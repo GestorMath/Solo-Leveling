@@ -1,4 +1,6 @@
 'use client'
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
 import { SystemProvider } from '../context/SystemContext'
 import Header from './Header'
 import AlertPopup from './AlertPopup'
