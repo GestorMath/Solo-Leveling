@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createBrowserClient } from '@supabase/ssr'
+import { supabase } from '@/app/lib/supabase'
 import { Loader2, ChevronRight } from 'lucide-react'
 
 type ClassId =
@@ -59,11 +59,6 @@ export default function OnboardingPage() {
   const [animating, setAnimating] = useState(false)
   const [registered, setRegistered] = useState(false)
 
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (!data.session) router.replace('/auth')
@@ -113,11 +108,9 @@ export default function OnboardingPage() {
         updated_at: new Date().toISOString(),
       }
 
-      // Tenta insert
       const { error: insertErr } = await supabase.from('players').insert(payload)
 
       if (insertErr) {
-        // Duplicado: faz update
         if (insertErr.code === '23505') {
           const { error: updateErr } = await supabase
             .from('players')
