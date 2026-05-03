@@ -1,7 +1,6 @@
 'use client'
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
-
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/app/lib/supabase'
@@ -108,19 +107,15 @@ export default function OnboardingPage() {
         updated_at: new Date().toISOString(),
       }
 
-      const { error: insertErr } = await supabase.from('players').insert(payload)
+      // Usa API route interna que usa service_role key
+      const res = await fetch('/api/create-player', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
 
-      if (insertErr) {
-        if (insertErr.code === '23505') {
-          const { error: updateErr } = await supabase
-            .from('players')
-            .update({ name: payload.name, class: selectedClass, stats: initStats, updated_at: payload.updated_at })
-            .eq('id', user.id)
-          if (updateErr) throw new Error(updateErr.message)
-        } else {
-          throw new Error(`${insertErr.code}: ${insertErr.message}`)
-        }
-      }
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Erro ao criar player')
 
       setRegistered(true)
       setTimeout(() => router.replace('/Dashboard'), 2200)
